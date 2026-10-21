@@ -19,7 +19,7 @@ O mira-remoto é um servidor Node sem dependências (`server.js`, cerca de 200 l
 - pré-carregamento de tudo antes de o espectador ver o primeiro slide;
 - link por apresentação, criado com uma chave, que deixa de valer ao encerrar;
 - `references/` e arquivos de apoio nunca são entregues;
-- deck de demonstração no próprio padrão do Mira e teste automatizado (23 verificações).
+- deck de demonstração no próprio padrão do Mira e teste automatizado (26 verificações).
 
 A API do `mira-draw.js` (`onchange`, `getShapes`, `setShapes`) que você já criou para o `/mira-remote` foi exatamente o que tornou isso possível sem tocar no módulo. O mira-remoto reaproveita o que o Mira já tem.
 
