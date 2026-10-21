@@ -1,0 +1,16 @@
+services:
+  mira-remoto:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      PRESENTER_KEY: ${PRESENTER_KEY:?defina PRESENTER_KEY}
+      PROTEGER: ${PROTEGER:-1}
+      MARCA: ${MARCA:-CONFIDENCIAL}
+    expose:
+      - "3000"
+    # Para adicionar decks sem rebuildar, descomente (a pasta decks/ do servidor vira a fonte):
+    # volumes:
+    #   - ./decks:/app/decks:ro

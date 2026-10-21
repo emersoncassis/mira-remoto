@@ -1,0 +1,12 @@
+{
+  "name": "mira-remoto",
+  "version": "0.1.0",
+  "description": "Apresentação ao vivo para decks do Mira (mira-animator): você conduz, a tela de quem assiste acompanha, de qualquer lugar.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  }
+}
