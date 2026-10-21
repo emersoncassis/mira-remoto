@@ -1,6 +1,7 @@
 'use strict';
 /* Teste de fumaça do mira-remoto: node test/smoke.js  (sem dependências) */
 process.env.PRESENTER_KEY = 'chave-de-teste';
+process.env.POLL_MS = '400';
 const assert = require('assert'), http = require('http');
 const servidor = require('../server.js');
 
@@ -83,6 +84,23 @@ servidor.listen(0, async () => {
     await espera(() => cli.some(x => x[0] === 'fim')); passo('encerrar avisa o cliente');
     assert.strictEqual((await fetch(base + '/s/' + slug)).status, 404); passo('link some depois de encerrar');
     c.destroy(); p.destroy();
+    /* long polling: a via de reserva quando o SSE não passa (Cloudflare Quick Tunnel) */
+    const r2 = await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'via-poll', marcaDagua: false, protecao: false }); const tk = (await r2.json()).token;
+    const poll = (c, v, q, k) => fetch(base + '/api/s/via-poll/poll?c=' + c + '&v=' + v + '&q=' + q + (k ? '&k=' + k : '')).then(r => r.json());
+    const a1 = await poll('cli1', -1, -1); assert.strictEqual(a1.papel, 'cliente'); assert.strictEqual(a1.i, 0); passo('poll: primeira pergunta responde na hora, com o papel');
+    const t0 = Date.now(); const a2 = await poll('cli1', a1.v, a1.q); assert.strictEqual(a2.v, a1.v); assert.ok(Date.now() - t0 >= 300 && !a2.papel); passo('poll: sem mudança, o servidor segura e responde no limite');
+    const espera2 = poll('cli1', a1.v, a1.q);
+    await new Promise(r => setTimeout(r, 80)); await post('/api/s/via-poll/estado', { k: tk, i: 5 });
+    const a3 = await espera2; assert.strictEqual(a3.i, 5); assert.ok(a3.v > a1.v); passo('poll: o slide novo acorda quem estava esperando');
+    const ap1 = await poll('pres9', -1, -1, tk); assert.strictEqual(ap1.papel, 'apresentador'); assert.strictEqual(ap1.clientes, 1); assert.strictEqual(ap1.prontos, 0); passo('poll: apresentador vê 1 espectador, ainda não pronto');
+    const espera3 = poll('pres9', ap1.v, ap1.q, tk);
+    await new Promise(r => setTimeout(r, 80)); await post('/api/s/via-poll/pronto', { c: 'cli1', p: 100, ok: true });
+    const ap2 = await espera3; assert.strictEqual(ap2.prontos, 1); passo('poll: "cliente pronto" chega ao apresentador');
+    const espera4 = poll('cli1', a3.v, a3.q);
+    await new Promise(r => setTimeout(r, 80)); await post('/api/s/via-poll/encerrar', { k: tk });
+    assert.strictEqual((await espera4).fim, true); passo('poll: encerrar avisa quem está esperando');
+    assert.strictEqual((await fetch(base + '/api/s/via-poll/poll?c=cli1&v=0&q=0')).status, 404); passo('poll: sessão encerrada dá 404');
+
     console.log('\nTudo certo: ' + ok + ' verificações.'); servidor.close(); process.exit(0);
   } catch (e) { console.error('FALHOU:', e.message); process.exit(1); }
 });

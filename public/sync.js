@@ -69,21 +69,44 @@
   }
   function ir(i) { if (secs[i]) secs[i].scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 
+  /* Duas vias de sincronia. A principal é o SSE (tempo real, uma conexão aberta). Se o SSE não entregar nada em 4 s
+     (Cloudflare Quick Tunnel, alguns proxies de empresa), troca sozinho para long polling: pergunta ao servidor
+     "mudou algo?" e ele só responde quando muda (ou em 20 s). ?t=poll na URL força o polling. */
+  function aoEstado(s) {
+    if (s.papel) { papel = s.papel; if (!pronto) montar(); }
+    tx.classList.remove('off'); atualizaTxt(s);
+    if (papel === 'cliente') {
+      alvo = s.i; if (carregado) ir(alvo);
+      if (s.papel) informar(pctAtual, carregado);
+      if (window.miraDraw && window.miraDraw.setShapes) window.miraDraw.setShapes(norm(s.shapes, true));
+    }
+  }
   function conectar() {
+    if (/(?:^|[?&])t=poll(?:&|$)/.test(location.search) || !window.EventSource) return poll();
+    var chegou = false, trocou = false;
     es = new EventSource('/api/s/' + slug + '/eventos?c=' + idc + (K ? '&k=' + encodeURIComponent(K) : ''));
-    es.addEventListener('estado', function (ev) {
-      var s = JSON.parse(ev.data);
-      if (s.papel) { papel = s.papel; if (!pronto) montar(); }
-      tx.classList.remove('off'); atualizaTxt(s);
-      if (papel === 'cliente') {
-        alvo = s.i; if (carregado) ir(alvo);
-        if (s.papel) informar(pctAtual, carregado);
-        if (window.miraDraw && window.miraDraw.setShapes) window.miraDraw.setShapes(norm(s.shapes, true));
-      }
-    });
+    var espera = setTimeout(function () { if (!chegou) { trocou = true; es.close(); poll(); } }, 4000);
+    es.addEventListener('estado', function (ev) { chegou = true; clearTimeout(espera); aoEstado(JSON.parse(ev.data)); });
     es.addEventListener('quem', function (ev) { atualizaTxt(JSON.parse(ev.data)); });
     es.addEventListener('fim', function () { fim(); });
-    es.onerror = function () { tx.classList.add('off'); txt.textContent = 'Reconectando…'; if (es.readyState === 2) fim(true); };
+    es.onerror = function () {
+      if (trocou) return;
+      if (!chegou) { clearTimeout(espera); trocou = true; es.close(); return poll(); }   // nunca funcionou: o caminho não aceita SSE
+      tx.classList.add('off'); txt.textContent = 'Reconectando…'; if (es.readyState === 2) fim(true);
+    };
+  }
+  function poll() {
+    var v = -1, q = -1, parar = false;
+    (function volta() {
+      if (parar) return;
+      fetch('/api/s/' + slug + '/poll?c=' + idc + '&v=' + v + '&q=' + q + (K ? '&k=' + encodeURIComponent(K) : ''), { cache: 'no-store' })
+        .then(function (r) { if (r.status === 404) { parar = true; fim(true); throw 0; } if (!r.ok) throw 1; return r.json(); })
+        .then(function (s) {
+          if (s.fim) { parar = true; fim(); return; }
+          v = s.v; q = s.q; aoEstado(s); volta();
+        })
+        .catch(function (e) { if (e === 0) return; tx.classList.add('off'); txt.textContent = 'Reconectando…'; setTimeout(volta, 1500); });
+    })();
   }
   function atualizaTxt(r) {
     if (papel !== 'apresentador') { txt.textContent = 'AO VIVO'; return; }

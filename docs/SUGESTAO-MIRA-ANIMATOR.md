@@ -11,15 +11,16 @@ A sugestão é uma segunda camada, irmã da primeira: o mesmo deck, sem edição
 
 ## O que já existe e funciona
 
-O mira-remoto é um servidor Node sem dependências (`server.js`, cerca de 200 linhas) mais um cliente (`sync.js`). Ele foi usado em uma apresentação comercial real e agora foi generalizado para servir qualquer deck do Mira:
+O mira-remoto é um servidor Node sem dependências (`server.js`, cerca de 270 linhas) mais um cliente (`sync.js`). Ele foi usado em uma apresentação comercial real e agora foi generalizado para servir qualquer deck do Mira:
 
 - o deck é copiado para `decks/<nome>/`, sem alteração;
 - o servidor injeta `<base>`, o `mira-draw.js` com a API de sincronia e o `sync.js` na hora de entregar a página;
-- slide e desenho viajam por SSE; a animação de cada slide roda local (Regra Zero preservada);
+- slide e desenho viajam por SSE, com *long polling* como via de reserva (o Quick Tunnel da Cloudflare não suporta SSE); a animação de cada slide roda local (Regra Zero preservada);
 - pré-carregamento de tudo antes de o espectador ver o primeiro slide;
 - link por apresentação, criado com uma chave, que deixa de valer ao encerrar;
 - `references/` e arquivos de apoio nunca são entregues;
-- deck de demonstração no próprio padrão do Mira e teste automatizado (26 verificações).
+- `npm run tunel`: apresenta do próprio notebook por um túnel gratuito da Cloudflare, sem conta e sem domínio;
+- deck de demonstração no próprio padrão do Mira e teste automatizado (33 verificações).
 
 A API do `mira-draw.js` (`onchange`, `getShapes`, `setShapes`) que você já criou para o `/mira-remote` foi exatamente o que tornou isso possível sem tocar no módulo. O mira-remoto reaproveita o que o Mira já tem.
 
@@ -50,7 +51,7 @@ Um possível passo seguinte é o apresentador usar o celular como controle tamb�
 - **Passos internos e módulos ao vivo.** O `/mira-remote` sincroniza `{slide, reveal}`; o mira-remoto sincroniza só o slide e o desenho. Mesa tática, quiz e survey rodam locais em cada tela.
 - **Persistência.** As sessões ficam na memória; reiniciar o servidor encerra as transmissões abertas.
 - **Autenticação.** Uma única chave de apresentador por servidor, suficiente para uso pessoal ou de uma equipe pequena.
-- **Hospedagem.** Exige um servidor com HTTPS. Documentado para Docker e Dokploy.
+- **Hospedagem.** Para demonstração basta o túnel gratuito (endereço muda a cada vez, sem garantia de disponibilidade). Para uso profissional, recomendo servidor com HTTPS e domínio próprio. Documentado para Docker e Dokploy.
 - **Licença e atribuição.** O tema, a estrutura de slides e o `mira-draw.js` do deck de demonstração vêm do Mira. Se houver interesse em incorporar a ideia ao pacote, o código pode ser doado ou adaptado como você preferir.
 
 ## Como experimentar em 2 minutos

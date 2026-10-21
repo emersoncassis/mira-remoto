@@ -64,20 +64,38 @@ function slugDe(nome) {
 }
 function enviar(res, evento, dados) { res.write('event: ' + evento + '\ndata: ' + JSON.stringify(dados) + '\n\n'); }
 function difundir(s, evento, dados, soClientes) {
-  s.clientes.forEach(c => { if (!soClientes || !c.apresentador) enviar(c.res, evento, dados); });
+  s.clientes.forEach(c => { if (c.res && (!soClientes || !c.apresentador)) enviar(c.res, evento, dados); });
 }
 function resumo(s) {
   let n = 0, prontos = 0, min = 100;
   s.clientes.forEach(c => { if (c.apresentador) return; n++; if (c.pronto) prontos++; else min = Math.min(min, c.pct || 0); });
   return { clientes: n, prontos, pct: prontos === n ? 100 : Math.round(min) };
 }
-function avisarContagem(s) { const r = resumo(s); s.clientes.forEach(c => { if (c.apresentador) enviar(c.res, 'quem', r); }); }
+function avisarContagem(s) { const r = resumo(s); s.q = (s.q || 0) + 1; s.clientes.forEach(c => { if (c.apresentador && c.res) enviar(c.res, 'quem', r); }); acordar(s, true); }
 
-function batimento() { sessoes.forEach(s => s.clientes.forEach(c => c.res.write(': ♥\n\n'))); }
+/* ---------- long polling: segunda via de sincronia, para quando o SSE não passa (Cloudflare Quick Tunnel, proxies que seguram o streaming) ----------
+   O cliente pergunta "mudou algo desde a versão v?". Se mudou, a resposta sai na hora; se não, o servidor segura a requisição por até 20 s. */
+const POLL_MS = +process.env.POLL_MS || 20e3, POLL_VIVO_MS = 45e3;   // 20 s fica abaixo do limite de 100 s do Cloudflare
+function cargaPoll(s, c, primeiro) {
+  const o = Object.assign({ v: s.v, q: s.q }, resumo(s));
+  if (!c.apresentador) { o.i = s.i; o.shapes = s.shapes; }
+  if (primeiro) o.papel = c.apresentador ? 'apresentador' : 'cliente';
+  return o;
+}
+function acordar(s, soApresentadores) {              // libera quem está esperando; o cliente volta a perguntar com a versão nova
+  if (!s.espera) return;
+  s.espera.forEach(w => { if (!soApresentadores || w.c.apresentador) { clearTimeout(w.t); s.espera.delete(w); w.c.visto = Date.now(); json(w.res, 200, cargaPoll(s, w.c, false)); } });
+}
+
+function batimento() { sessoes.forEach(s => s.clientes.forEach(c => { if (c.res) c.res.write(': ♥\n\n'); })); }
 setInterval(() => {
   const agora = Date.now();
   sessoes.forEach((s, slug) => { if (s.clientes.size === 0 && agora - s.ultimo > TTL_MS) sessoes.delete(slug); });
 }, 60e3).unref();
+setInterval(() => {                                   // quem pergunta por polling e sumiu deixa de contar
+  const agora = Date.now();
+  sessoes.forEach(s => { let mudou = false; s.clientes.forEach(c => { if (c.poll && agora - c.visto > POLL_VIVO_MS) { s.clientes.delete(c); mudou = true; } }); if (mudou) avisarContagem(s); });
+}, 15e3).unref();
 setInterval(batimento, 20e3).unref();
 
 /* ---------- utilidades HTTP ---------- */
@@ -155,7 +173,7 @@ const servidor = http.createServer(async (req, res) => {
       if (sessoes.has(slug)) return json(res, 409, { erro: 'Esse nome de link já está em uso. Escolha outro.' });
       const token = crypto.randomBytes(18).toString('hex');
       const marcaDagua = bool(b.marcaDagua, PROTEGER), protecao = bool(b.protecao, PROTEGER), marca = limpaMarca(b.marca);
-      sessoes.set(slug, { deck, token, marcaDagua, protecao, marca, i: 0, shapes: [], clientes: new Set(), ultimo: Date.now() });
+      sessoes.set(slug, { deck, token, marcaDagua, protecao, marca, i: 0, v: 1, q: 1, espera: new Set(), shapes: [], clientes: new Set(), ultimo: Date.now() });
       return json(res, 201, { slug, token, deck, marcaDagua, protecao, marca });
     }
     let m = /^\/api\/s\/([a-z0-9-]+)\/pronto$/.exec(p);
@@ -164,6 +182,23 @@ const servidor = http.createServer(async (req, res) => {
       const b = await corpo(req, 2e3), id = String(b.c || '').replace(/[^a-z0-9]/gi, '').slice(0, 32);
       s.clientes.forEach(c => { if (!c.apresentador && id && c.id === id) { c.pct = Math.max(0, Math.min(100, +b.p || 0)); c.pronto = b.ok === true; } });
       avisarContagem(s); res.writeHead(204); return res.end();
+    }
+    m = /^\/api\/s\/([a-z0-9-]+)\/poll$/.exec(p);
+    if (m && req.method === 'GET') {
+      const s = sessoes.get(m[1]); if (!s) return json(res, 404, { erro: 'Sessão não encontrada.' });
+      const id = String(url.searchParams.get('c') || '').replace(/[^a-z0-9]/gi, '').slice(0, 32);
+      if (!id) return json(res, 400, { erro: 'Falta o identificador.' });
+      const apresentador = igualSeg(url.searchParams.get('k') || '', s.token);
+      let c = null; s.clientes.forEach(x => { if (x.poll && x.id === id) c = x; });
+      const novo = !c;
+      if (novo) { c = { res: null, poll: true, apresentador, id, pct: 0, pronto: false }; s.clientes.add(c); }
+      c.visto = Date.now(); s.ultimo = Date.now();
+      if (novo) avisarContagem(s);
+      const v = +url.searchParams.get('v'), q = +url.searchParams.get('q');
+      if (novo || v !== s.v || (apresentador && q !== s.q)) return json(res, 200, cargaPoll(s, c, novo || !Number.isFinite(v) || v < 0));
+      const w = { res, c, t: setTimeout(() => { s.espera.delete(w); c.visto = Date.now(); json(res, 200, cargaPoll(s, c, false)); }, POLL_MS) };
+      s.espera.add(w); req.on('close', () => { clearTimeout(w.t); s.espera.delete(w); });
+      return;
     }
     m = /^\/api\/s\/([a-z0-9-]+)\/(eventos|estado|encerrar)$/.exec(p);
     if (m) {
@@ -185,12 +220,13 @@ const servidor = http.createServer(async (req, res) => {
       if (!igualSeg(b.k || '', s.token)) return json(res, 403, { erro: 'Sem permissão.' });
       if (m[2] === 'estado' && req.method === 'POST') {
         const i = Number.isInteger(b.i) && b.i >= 0 && b.i < 500 ? b.i : s.i;
-        s.i = i; if (Array.isArray(b.shapes)) s.shapes = b.shapes.slice(0, 500); s.ultimo = Date.now();
-        difundir(s, 'estado', { i: s.i, shapes: s.shapes }, true);
+        s.i = i; if (Array.isArray(b.shapes)) s.shapes = b.shapes.slice(0, 500); s.ultimo = Date.now(); s.v++;
+        difundir(s, 'estado', { i: s.i, shapes: s.shapes }, true); acordar(s, false);
         res.writeHead(204); return res.end();
       }
       if (m[2] === 'encerrar' && req.method === 'POST') {
-        difundir(s, 'fim', {}, false); s.clientes.forEach(c => c.res.end()); sessoes.delete(m[1]);
+        difundir(s, 'fim', {}, false); s.clientes.forEach(c => { if (c.res) c.res.end(); });
+        s.espera.forEach(w => { clearTimeout(w.t); json(w.res, 200, { fim: true }); }); s.espera.clear(); sessoes.delete(m[1]);
         res.writeHead(204); return res.end();
       }
       return json(res, 405, { erro: 'Método não permitido.' });
