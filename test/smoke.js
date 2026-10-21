@@ -53,6 +53,22 @@ servidor.listen(0, async () => {
     assert.strictEqual((await fetch(base + '/_d/demo-mira-remoto/%2e%2e/%2e%2e/server.js', H)).status, 404); passo('path traversal bloqueado');
     assert.strictEqual((await fetch(base + '/_d/outro-deck/index.html', H)).status, 404); passo('cookie só vale para o deck da própria sessão');
 
+    /* marca d'água e proteção são escolhidas por transmissão */
+    const cfgDe = h => JSON.parse(/window\.__MIRA_REMOTO__=(\{.*?\});/.exec(h)[1]);
+    assert.deepStrictEqual(cfgDe(html), { marcaDagua: true, protecao: true, marca: 'CONFIDENCIAL' }); passo('padrão: marca d\'água e proteção ligadas');
+    for (const [nome, corpo, esperado] of [
+      ['sem-nada', { marcaDagua: false, protecao: false }, { marcaDagua: false, protecao: false, marca: 'CONFIDENCIAL' }],
+      ['so-marca', { marcaDagua: true, protecao: false, marca: 'Acme <b>"2026"</b>' }, { marcaDagua: true, protecao: false, marca: 'Acme b2026/b' }],
+      ['so-protecao', { marcaDagua: false, protecao: true }, { marcaDagua: false, protecao: true, marca: 'CONFIDENCIAL' }]]) {
+      const rr = await post('/api/sessoes', Object.assign({ chave: 'chave-de-teste', nome }, corpo)); assert.strictEqual(rr.status, 201);
+      const jj = await rr.json(); assert.strictEqual(jj.marcaDagua, esperado.marcaDagua); assert.strictEqual(jj.protecao, esperado.protecao);
+      const hh = await (await fetch(base + '/s/' + nome)).text(); assert.deepStrictEqual(cfgDe(hh), esperado);
+      await post('/api/s/' + nome + '/encerrar', { k: jj.token });
+    }
+    passo('escolha por transmissão (sem nada, só marca, só proteção) chega ao deck e o texto é saneado');
+    const dk2 = await (await fetch(base + '/api/decks', { headers: { 'X-Chave': 'chave-de-teste' } })).json();
+    assert.deepStrictEqual(dk2.padrao, { marcaDagua: true, protecao: true, marca: 'CONFIDENCIAL' }); passo('/api/decks informa o padrão do servidor');
+
     const cli = [], pres = [];
     const c = sse(base, '/api/s/' + slug + '/eventos?c=abc123', (e, d) => cli.push([e, d]));
     const p = sse(base, '/api/s/' + slug + '/eventos?c=pres01&k=' + token, (e, d) => pres.push([e, d]));

@@ -11,6 +11,9 @@ input:focus,select:focus{outline:2px solid #34E89E;outline-offset:1px}select:dis
 .pre{display:flex;align-items:center;gap:.3rem;color:#9db3a8;font-size:.85rem}.pre input{flex:1}
 button{margin-top:1.3rem;width:100%;padding:.85rem;border:0;border-radius:999px;background:#34E89E;color:#04130d;font:700 1rem inherit;cursor:pointer}
 button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min-height:1.2em}.dica{margin:.3rem 0 0;font-size:.78rem;color:#7f958a}
+.op{margin:1.1rem 0 0;padding:.6rem .9rem .8rem;border:1px solid rgba(255,255,255,.12);border-radius:12px}.op legend{padding:0 .4rem;font-size:.8rem;color:#9db3a8}
+.ck{display:flex;gap:.55rem;align-items:flex-start;margin:.5rem 0;font-size:.88rem;color:#dfeae4;cursor:pointer}.ck input{width:auto;margin-top:.25rem;accent-color:#34E89E}
+#linhaMarca{margin:.1rem 0 .3rem 1.6rem}#linhaMarca input{padding:.5rem .7rem;font-size:.85rem}
 .rodape{margin-top:1rem;font-size:.75rem;color:#6f857a;text-align:center}
 </style></head><body>
 <form class="c" id="f" autocomplete="off">
@@ -23,6 +26,11 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
   <p class="dica" id="dica"></p>
   <label for="nome">Nome do link (opcional)</label>
   <div class="pre"><span id="host"></span><span>/s/</span><input id="nome" maxlength="40" placeholder="ex.: loja-do-joao"></div>
+  <fieldset class="op"><legend>Para quem assiste</legend>
+    <label class="ck"><input type="checkbox" id="wm" checked> Marca d'água (nome do link, código do visitante e data)</label>
+    <div class="pre" id="linhaMarca"><span>Texto:</span><input id="marca" maxlength="40" placeholder="CONFIDENCIAL"></div>
+    <label class="ck"><input type="checkbox" id="prot" checked> Bloquear cópia e impressão, e escurecer a tela ao perder o foco</label>
+  </fieldset>
   <button id="b" type="submit">Criar e começar</button>
   <div class="e" id="e" role="alert"></div>
   <div class="rodape">mira-remoto · decks do Mira (mira-animator) ao vivo, de qualquer lugar</div>
@@ -30,7 +38,10 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
 <script>
 var $ = function (id) { return document.getElementById(id); };
 $('host').textContent = location.host;
-var ultima = '', timer;
+var ultima = '', timer, lembrado = false;
+function mostraMarca() { $('linhaMarca').style.display = $('wm').checked ? 'flex' : 'none'; }
+try { var sv = JSON.parse(localStorage.getItem('mira-remoto:opcoes') || 'null'); if (sv) { $('wm').checked = !!sv.wm; $('prot').checked = !!sv.prot; $('marca').value = sv.marca || ''; lembrado = true; } } catch (_) { }
+$('wm').addEventListener('change', mostraMarca); mostraMarca();
 function listar() {
   var k = $('chave').value;
   if (!k || k === ultima) return;
@@ -39,6 +50,7 @@ function listar() {
     var s = $('deck'); s.innerHTML = '';
     if (!x[0]) { s.disabled = true; s.innerHTML = '<option value="">Digite a chave para listar os decks</option>'; $('dica').textContent = x[1].erro || ''; return; }
     $('dica').textContent = '';
+    if (!lembrado && x[1].padrao) { $('wm').checked = x[1].padrao.marcaDagua; $('prot').checked = x[1].padrao.protecao; $('marca').placeholder = x[1].padrao.marca; }
     if (!x[1].decks.length) { s.disabled = true; s.innerHTML = '<option value="">Nenhum deck em decks/</option>'; return; }
     x[1].decks.forEach(function (d) { var o = document.createElement('option'); o.value = d; o.textContent = d; s.appendChild(o); });
     s.disabled = false;
@@ -49,10 +61,10 @@ $('chave').addEventListener('change', listar);
 $('f').addEventListener('submit', function (ev) {
   ev.preventDefault(); var b = $('b'), e = $('e'); b.disabled = true; e.textContent = '';
   fetch('/api/sessoes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chave: $('chave').value, deck: $('deck').value, nome: $('nome').value }) })
+    body: JSON.stringify({ chave: $('chave').value, deck: $('deck').value, nome: $('nome').value, marcaDagua: $('wm').checked, protecao: $('prot').checked, marca: $('marca').value }) })
   .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); }).then(function (x) {
     if (!x[0]) { e.textContent = x[1].erro || 'Não foi possível criar.'; b.disabled = false; return; }
-    try { sessionStorage.setItem('k:' + x[1].slug, x[1].token); } catch (_) { }
+    try { sessionStorage.setItem('k:' + x[1].slug, x[1].token); localStorage.setItem('mira-remoto:opcoes', JSON.stringify({ wm: $('wm').checked, prot: $('prot').checked, marca: $('marca').value })); } catch (_) { }
     location.href = '/s/' + x[1].slug + '?k=' + x[1].token;
   }).catch(function () { e.textContent = 'Sem conexão com o servidor.'; b.disabled = false; });
 });

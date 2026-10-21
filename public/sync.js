@@ -1,5 +1,5 @@
 /* mira-remoto · cliente: tela cheia (todos) + transmissão ao vivo (o apresentador conduz, o espectador acompanha).
-   Configuração vem do servidor em window.__MIRA_REMOTO__ = { protecao: bool, marca: string }. */
+   Configuração vem do servidor, por transmissão, em window.__MIRA_REMOTO__ = { marcaDagua: bool, protecao: bool, marca: string }. */
 (function () {
   'use strict';
   var CFG = window.__MIRA_REMOTO__ || {};
@@ -171,18 +171,24 @@
 
 
   /* ---------- proteção do espectador: sem copiar, imprimir, salvar; marca d'água; tela some ao perder o foco ---------- */
-  function proteger() {
+  /* marca d'água: nome do link, código do visitante e data, repetidos na diagonal por cima do deck */
+  function marcaDagua() {
     var marca = String(CFG.marca || 'CONFIDENCIAL') + ' · ' + slug + ' · ' + String(idc).slice(-5).toUpperCase() + ' · ' + new Date().toLocaleDateString('pt-BR');
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="420" height="260"><text x="50%" y="50%" transform="rotate(-24 210 130)" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="rgba(255,255,255,.13)" stroke="rgba(0,0,0,.10)" stroke-width=".6">' + marca.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text></svg>';
     var st = d.createElement('style');
+    st.textContent = '#wm{position:fixed;inset:0;z-index:2147483000;pointer-events:none;background:url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") repeat}';
+    d.head.appendChild(st);
+    var wm = d.createElement('div'); wm.id = 'wm'; d.body.appendChild(wm);
+  }
+
+  function proteger() {
+    var st = d.createElement('style');
     st.textContent = 'html,body,body *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-user-drag:none}'
       + 'img,video{pointer-events:none}'
-      + '#wm{position:fixed;inset:0;z-index:2147483000;pointer-events:none;background:url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") repeat}'
       + '#cobre{position:fixed;inset:0;z-index:2147483600;background:#07090c;color:#e8eef5;display:none;align-items:center;justify-content:center;text-align:center;font:600 1.05rem system-ui,sans-serif;padding:2rem}'
       + '#cobre.on{display:flex}'
       + '@media print{html{display:none!important}}';
     d.head.appendChild(st);
-    var wm = d.createElement('div'); wm.id = 'wm'; d.body.appendChild(wm);
     var cb = d.createElement('div'); cb.id = 'cobre'; cb.textContent = 'Conteúdo protegido. Volte para esta janela para continuar assistindo.'; d.body.appendChild(cb);
     var trava = 0;
     function cobrir(ms) { cb.classList.add('on'); trava = Date.now() + (ms || 0); }
@@ -236,6 +242,7 @@
       addEventListener('keydown', tecla);
     } else {
       carregarTudo();
+      if (CFG.marcaDagua !== false) marcaDagua();
       if (CFG.protecao !== false) proteger();
       /* cliente: só assiste (bloqueia teclado, roda e toque; F continua valendo) */
       tx.className = 'v';

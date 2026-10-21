@@ -7,8 +7,9 @@
      PORT           porta (3000)
      PRESENTER_KEY  chave de quem apresenta (se faltar, é gerada e mostrada no log)
      DECKS_DIR      pasta dos decks (./decks)
-     PROTEGER       1 = espectador sem copiar/imprimir, com marca d'água (padrão). 0 = desliga
-     MARCA          texto da marca d'água (CONFIDENCIAL)                                       */
+     PROTEGER       padrão da tela /apresentar: 1 = marca d'água e proteção ligadas, 0 = desligadas
+     MARCA          texto padrão da marca d'água (CONFIDENCIAL)
+   Marca d'água e proteção são escolhidas a cada transmissão em /apresentar; estas duas só definem o padrão. */
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 
 const PORT = +process.env.PORT || 3000;
@@ -16,6 +17,8 @@ const PUB = path.join(__dirname, 'public');
 const DECKS = path.resolve(process.env.DECKS_DIR || path.join(__dirname, 'decks'));
 const PROTEGER = process.env.PROTEGER !== '0';
 const MARCA = String(process.env.MARCA || 'CONFIDENCIAL').slice(0, 40);
+const bool = (v, padrao) => typeof v === 'boolean' ? v : padrao;
+const limpaMarca = v => String(v == null ? '' : v).replace(/[\u0000-\u001f<>&"]/g, '').trim().slice(0, 40) || MARCA;
 let KEY = process.env.PRESENTER_KEY || '';
 if (!KEY) { KEY = crypto.randomBytes(6).toString('hex'); console.log('[mira-remoto] PRESENTER_KEY não definida; chave temporária: ' + KEY); }
 
@@ -109,13 +112,14 @@ function estatico(req, res, arquivo, cache, extra) {
 
 /* O deck do Mira NÃO precisa ser editado: o servidor injeta, na hora de entregar, o <base> (para os caminhos
    relativos assets/... e mira/... funcionarem), a configuração e os scripts de telestrator e de sincronia. */
-function prepararDeck(slug, deck) {
+function prepararDeck(slug, s) {
+  const deck = s.deck;
   let html = fs.readFileSync(path.join(DECKS, deck, 'index.html'), 'utf8');
   const base = '<base href="/_d/' + deck + '/">';
   html = /<base\b[^>]*>/i.test(html) ? html.replace(/<base\b[^>]*>/i, base) : html.replace(/<head\b[^>]*>/i, m => m + base);
   html = html.replace(/<script\b[^>]*mira-draw[^>]*>\s*<\/script>/gi, '');        // usa a versão do servidor, que tem a API de sincronia
   html = html.replace(/<script\b[^>]*\bsync\.js[^>]*>\s*<\/script>/gi, '');
-  const cfg = JSON.stringify({ protecao: PROTEGER, marca: MARCA }).replace(/</g, '\\u003c');
+  const cfg = JSON.stringify({ marcaDagua: s.marcaDagua, protecao: s.protecao, marca: s.marca }).replace(/</g, '\\u003c');
   const tags = '<script>window.__MIRA_REMOTO__=' + cfg + ';</script>'
     + '<script defer src="/_mira/mira-draw.js"></script><script defer src="/_mira/sync.js"></script>';
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, tags + '</body>') : html + tags;
@@ -135,7 +139,7 @@ const servidor = http.createServer(async (req, res) => {
       const a = ip(req);
       if (bloqueado(a)) return json(res, 429, { erro: 'Muitas tentativas. Aguarde alguns minutos.' });
       if (!igualSeg(req.headers['x-chave'] || '', KEY)) { falhou(a); return json(res, 403, { erro: 'Chave incorreta.' }); }
-      return json(res, 200, { decks: listarDecks() });
+      return json(res, 200, { decks: listarDecks(), padrao: { marcaDagua: PROTEGER, protecao: PROTEGER, marca: MARCA } });
     }
     if (p === '/api/sessoes' && req.method === 'POST') {
       const a = ip(req);
@@ -150,8 +154,9 @@ const servidor = http.createServer(async (req, res) => {
       const slug = slugDe(b.nome);
       if (sessoes.has(slug)) return json(res, 409, { erro: 'Esse nome de link já está em uso. Escolha outro.' });
       const token = crypto.randomBytes(18).toString('hex');
-      sessoes.set(slug, { deck, token, i: 0, shapes: [], clientes: new Set(), ultimo: Date.now() });
-      return json(res, 201, { slug, token, deck });
+      const marcaDagua = bool(b.marcaDagua, PROTEGER), protecao = bool(b.protecao, PROTEGER), marca = limpaMarca(b.marca);
+      sessoes.set(slug, { deck, token, marcaDagua, protecao, marca, i: 0, shapes: [], clientes: new Set(), ultimo: Date.now() });
+      return json(res, 201, { slug, token, deck, marcaDagua, protecao, marca });
     }
     let m = /^\/api\/s\/([a-z0-9-]+)\/pronto$/.exec(p);
     if (m && req.method === 'POST') {
@@ -197,7 +202,7 @@ const servidor = http.createServer(async (req, res) => {
     if (m) {
       const s = sessoes.get(m[1]);
       if (!s) { res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(PAG_404); }
-      let html; try { html = prepararDeck(m[1], s.deck); } catch (_) { res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Deck indisponível.'); }
+      let html; try { html = prepararDeck(m[1], s); } catch (_) { res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Deck indisponível.'); }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow',
         'Set-Cookie': 'ap=' + m[1] + '.' + assina(m[1]) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200'
           + (req.socket.encrypted || /^https/i.test(req.headers['x-forwarded-proto'] || '') ? '; Secure' : '') });   // Secure só em HTTPS (funciona também em http://localhost)

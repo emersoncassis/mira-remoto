@@ -29,7 +29,7 @@ Os dois se complementam: LAN para a sala, mira-remoto para o cliente à distânc
 - **Slide e desenho sincronizados.** O desenho usa o `mira-draw` (telestrator do Mira) e viaja em coordenadas do quadro 16:9, então cai no mesmo lugar em qualquer tela.
 - **Viaja o estado, não o vídeo.** Só o número do slide e os traços; a animação de cada slide roda local em cada tela (a Regra Zero do Mira continua valendo).
 - **Pré-carregamento.** O espectador só vê o deck depois de baixar tudo (imagens, vídeos). Na sua barra aparece "N carregando (xx%)" e, no fim, "✔ pronto, pode iniciar".
-- **Proteção do espectador** (opcional): sem copiar, imprimir ou salvar; marca d'água com o nome do link, um código do visitante e a data; tela preta ao perder o foco ou ao apertar PrintScreen.
+- **Marca d'água e proteção, escolhidas a cada transmissão.** Ao iniciar, você marca ou desmarca: **marca d'água** (nome do link, código do visitante e data, com o texto que você quiser) e **bloqueio de cópia e impressão com tela preta ao perder o foco ou ao apertar PrintScreen**. Dá para usar só uma, as duas ou nenhuma. O formulário lembra a sua última escolha.
 - **Vários decks no mesmo servidor.** Na hora de iniciar, você escolhe qual deck apresentar.
 - **Zero dependências.** Um `server.js` em Node 18+ e arquivos estáticos.
 
@@ -42,7 +42,7 @@ PRESENTER_KEY=minha-chave node server.js
 
 Sem `PRESENTER_KEY`, o servidor gera uma chave temporária e mostra no log.
 
-1. Abra `http://localhost:3000/apresentar`, digite a chave, escolha o deck e (opcional) um nome para o link.
+1. Abra `http://localhost:3000/apresentar`, digite a chave, escolha o deck e (opcional) um nome para o link. Em **Para quem assiste**, escolha se haverá marca d'água (e o texto dela) e se a proteção fica ligada.
 2. Você cai no deck como apresentador. Clique em **Copiar link do cliente** e envie.
 3. Setas, Espaço e PageUp/PageDown trocam o slide. O cliente acompanha. `P` liga a caneta, `F` abre a tela cheia.
 4. **Encerrar** (na barra, embaixo) termina a transmissão.
@@ -112,8 +112,10 @@ Use sempre HTTPS (o Dokploy faz isso com o domínio). O cookie da sessão ganha 
 | `PRESENTER_KEY` | gerada no log | chave de quem apresenta (a que aparece em "Chave de acesso") |
 | `PORT` | `3000` | porta |
 | `DECKS_DIR` | `./decks` | pasta dos decks |
-| `PROTEGER` | `1` | `0` desliga a proteção do espectador |
-| `MARCA` | `CONFIDENCIAL` | texto da marca d'água |
+| `PROTEGER` | `1` | padrão das duas caixas de "Para quem assiste" (`0` abre o formulário com elas desmarcadas) |
+| `MARCA` | `CONFIDENCIAL` | texto padrão da marca d'água |
+
+Marca d'água e proteção são decididas **por transmissão**, no `/apresentar`; as duas variáveis só definem o padrão.
 
 **Para trocar a chave:** altere `PRESENTER_KEY` e reinicie (no Dokploy: *Environment* → salvar → *Deploy*). Trocar a chave encerra as transmissões abertas.
 
@@ -122,6 +124,7 @@ Use sempre HTTPS (o Dokploy faz isso com o domínio). O cookie da sessão ganha 
 - A raiz (`/`) mostra só "Acesso restrito". O deck e seus arquivos só são entregues a quem abre um link `/s/<nome>` de uma transmissão ativa (cookie assinado, que deixa de valer a cada reinício).
 - Criar transmissão e listar os decks exigem a chave. Tentativas erradas têm limite (6 a cada 10 minutos por IP).
 - A comparação de chaves é em tempo constante; o token do apresentador só vai na primeira URL e some do endereço em seguida.
+- Sem marca d'água e sem proteção, o espectador consegue copiar, imprimir e tirar print. Use essa opção para público de confiança ou conteúdo aberto.
 - Nenhum navegador impede foto da tela. A marca d'água serve para identificar quem vazou.
 
 ## Como funciona
@@ -135,7 +138,7 @@ Use sempre HTTPS (o Dokploy faz isso com o domínio). O cookie da sessão ganha 
 |---|---|---|
 | `GET /apresentar` | você | formulário: chave, deck, nome do link |
 | `GET /api/decks` | você | lista os decks (header `X-Chave`) |
-| `POST /api/sessoes` | você | cria a transmissão `{chave, deck, nome}` |
+| `POST /api/sessoes` | você | cria a transmissão `{chave, deck, nome, marcaDagua, protecao, marca}` (os três últimos são opcionais) |
 | `GET /s/<nome>` | todos | entrega o deck com a camada de sincronia |
 | `GET /api/s/<nome>/eventos` | todos | canal SSE; com `?k=<token>` entra como apresentador |
 | `POST /api/s/<nome>/estado` | apresentador | publica slide e desenho |
@@ -149,7 +152,7 @@ Use sempre HTTPS (o Dokploy faz isso com o domínio). O cookie da sessão ganha 
 node test/smoke.js
 ```
 
-Sobe o servidor e confere 23 pontos: acesso restrito, chave, criação de sessão, injeção no deck, bloqueio de `references/` e de path traversal, sincronia do slide em tempo real, pré-carregamento e encerramento.
+Sobe o servidor e confere 26 pontos: acesso restrito, chave, criação de sessão, escolha de marca d'água e proteção por transmissão, injeção no deck, bloqueio de `references/` e de path traversal, sincronia do slide em tempo real, pré-carregamento e encerramento.
 
 ## Sugestão para o mira-animator
 
