@@ -78,7 +78,7 @@ Ou `PRESENTER_KEY=minha-chave docker compose up -d --build`. Para adicionar deck
 | `DECKS_DIR` | `./decks` | pasta dos decks |
 | `PROTEGER` | `1` | `0` abre o formulário com marca d'água e proteção desmarcadas |
 | `MARCA` | `CONFIDENCIAL` | texto padrão da marca d'água |
-| `BASE_PATH` | vazio | prefixo quando roda numa subpasta do domínio, ex.: `/apresenta` (então a tela de apresentar fica em `/apresenta/apresentar` e o link do cliente em `/apresenta/s/<nome>`) |
+| `BASE_PATH` | vazio | prefixo quando roda numa subpasta do domínio, ex.: `/apresenta` (então `/apresenta` abre a tela de apresentar, que também fica em `/apresenta/apresentar`, e o link do cliente fica em `/apresenta/s/<nome>`) |
 | `POLL_MS` | `20000` | tempo que o servidor segura cada pergunta do polling (ms) |
 
 ## Segurança e limites

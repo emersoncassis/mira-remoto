@@ -248,7 +248,7 @@ const servidor = http.createServer(async (req, res) => {
           + (req.socket.encrypted || /^https/i.test(req.headers['x-forwarded-proto'] || '') ? '; Secure' : '') });   // Secure só em HTTPS (funciona também em http://localhost)
       return res.end(req.method === 'HEAD' ? undefined : html);
     }
-    if (p === '/apresentar') return estatico(req, res, path.join(PUB, 'apresentar.html'), false);
+    if (p === '/apresentar' || (BASE && p === '/')) return estatico(req, res, path.join(PUB, 'apresentar.html'), false);
 
     /* --- arquivos: só para quem abriu um link de sessão ativa --- */
     const slug = cookieSlug(req);

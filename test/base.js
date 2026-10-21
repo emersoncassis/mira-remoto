@@ -16,6 +16,7 @@ servidor.listen(0, async () => {
       assert.strictEqual((await fetch(b + pre + '/_d/demo-mira-remoto/assets/vendor/d3.v7.min.js', H)).status, 200);
       assert.strictEqual((await fetch(b + pre + '/_mira/sync.js', H)).status, 200);
     }
+    for (const raiz of ['/apresenta', '/apresenta/']) { const x = await fetch(b + raiz); assert.strictEqual(x.status, 200); assert.match(await x.text(), /Iniciar apresentação ao vivo/); }   // a raiz da subpasta abre o formulário
     console.log('BASE_PATH ok'); servidor.close(); process.exit(0);
   } catch (e) { console.log('FALHOU: ' + e.message); process.exit(1); }
 });

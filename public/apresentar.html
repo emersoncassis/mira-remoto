@@ -37,7 +37,7 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
 </form>
 <script>
 var $ = function (id) { return document.getElementById(id); };
-var BASE = location.pathname.replace(/\/apresentar\/?$/, '');
+var BASE = location.pathname.replace(/\/(apresentar)?\/?$/, '');
 $('host').textContent = location.host + BASE;
 var ultima = '', timer, lembrado = false;
 function mostraMarca() { $('linhaMarca').style.display = $('wm').checked ? 'flex' : 'none'; }
