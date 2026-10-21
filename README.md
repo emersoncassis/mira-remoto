@@ -78,6 +78,7 @@ Ou `PRESENTER_KEY=minha-chave docker compose up -d --build`. Para adicionar deck
 | `DECKS_DIR` | `./decks` | pasta dos decks |
 | `PROTEGER` | `1` | `0` abre o formulário com marca d'água e proteção desmarcadas |
 | `MARCA` | `CONFIDENCIAL` | texto padrão da marca d'água |
+| `BASE_PATH` | vazio | prefixo quando roda numa subpasta do domínio, ex.: `/apresenta` (então a tela de apresentar fica em `/apresenta/apresentar` e o link do cliente em `/apresenta/s/<nome>`) |
 | `POLL_MS` | `20000` | tempo que o servidor segura cada pergunta do polling (ms) |
 
 ## Segurança e limites
@@ -111,7 +112,7 @@ O apresentador publica `{slide, desenho}` em `POST /api/s/<nome>/estado`; o serv
 npm test
 ```
 
-33 verificações: acesso restrito, chave, sessões, marca d'água e proteção, injeção no deck, bloqueio de `references/` e de path traversal, sincronia por SSE e por polling, pré-carregamento e encerramento.
+33 verificações (mais um teste do BASE_PATH): acesso restrito, chave, sessões, marca d'água e proteção, injeção no deck, bloqueio de `references/` e de path traversal, sincronia por SSE e por polling, pré-carregamento e encerramento.
 
 ## Sugestão ao mira-animator
 

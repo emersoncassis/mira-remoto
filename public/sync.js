@@ -2,7 +2,7 @@
    Configuração vem do servidor, por transmissão, em window.__MIRA_REMOTO__ = { marcaDagua: bool, protecao: bool, marca: string }. */
 (function () {
   'use strict';
-  var CFG = window.__MIRA_REMOTO__ || {};
+  var CFG = window.__MIRA_REMOTO__ || {}, BASE = CFG.base || '';
   var secs = [].slice.call(document.querySelectorAll('body > section'));
   var d = document, de = d.documentElement;
 
@@ -37,7 +37,7 @@
   }
 
   /* ---------- transmissão ---------- */
-  var m = location.pathname.match(/^\/s\/([a-z0-9-]+)\/?$/);
+  var m = location.pathname.slice(BASE.length).match(/^\/s\/([a-z0-9-]+)\/?$/);
   if (!m) { addEventListener('keydown', tecla); return; }
   var slug = m[1], K = new URLSearchParams(location.search).get('k') || '';
   try { if (K) { sessionStorage.setItem('k:' + slug, K); history.replaceState(null, '', location.pathname); } else K = sessionStorage.getItem('k:' + slug) || ''; } catch (_) { }
@@ -84,7 +84,7 @@
   function conectar() {
     if (/(?:^|[?&])t=poll(?:&|$)/.test(location.search) || !window.EventSource) return poll();
     var chegou = false, trocou = false;
-    es = new EventSource('/api/s/' + slug + '/eventos?c=' + idc + (K ? '&k=' + encodeURIComponent(K) : ''));
+    es = new EventSource(BASE + '/api/s/' + slug + '/eventos?c=' + idc + (K ? '&k=' + encodeURIComponent(K) : ''));
     var espera = setTimeout(function () { if (!chegou) { trocou = true; es.close(); poll(); } }, 4000);
     es.addEventListener('estado', function (ev) { chegou = true; clearTimeout(espera); aoEstado(JSON.parse(ev.data)); });
     es.addEventListener('quem', function (ev) { atualizaTxt(JSON.parse(ev.data)); });
@@ -99,7 +99,7 @@
     var v = -1, q = -1, parar = false;
     (function volta() {
       if (parar) return;
-      fetch('/api/s/' + slug + '/poll?c=' + idc + '&v=' + v + '&q=' + q + (K ? '&k=' + encodeURIComponent(K) : ''), { cache: 'no-store' })
+      fetch(BASE + '/api/s/' + slug + '/poll?c=' + idc + '&v=' + v + '&q=' + q + (K ? '&k=' + encodeURIComponent(K) : ''), { cache: 'no-store' })
         .then(function (r) { if (r.status === 404) { parar = true; fim(true); throw 0; } if (!r.ok) throw 1; return r.json(); })
         .then(function (s) {
           if (s.fim) { parar = true; fim(); return; }
@@ -121,7 +121,7 @@
     var agora = Date.now();
     if (!ok && (agora - ultInf < 450 || Math.abs(p - ultPct) < 2)) return;
     ultInf = agora; ultPct = p; ultOk = ok;
-    fetch('/api/s/' + slug + '/pronto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ c: idc, p: p, ok: !!ok }) }).catch(function () { });
+    fetch(BASE + '/api/s/' + slug + '/pronto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ c: idc, p: p, ok: !!ok }) }).catch(function () { });
   }
 
   /* ---------- cliente: carrega TUDO antes de mostrar ---------- */
@@ -243,20 +243,20 @@
       tx.className = 'a'; 
       var cp = d.createElement('button'); cp.type = 'button'; cp.textContent = 'Copiar link do cliente';
       cp.addEventListener('click', function () {
-        var l = location.origin + '/s/' + slug;
+        var l = location.origin + BASE + '/s/' + slug;
         (navigator.clipboard ? navigator.clipboard.writeText(l) : Promise.reject()).then(function () { cp.textContent = 'Copiado!'; }, function () { prompt('Link do cliente:', l); });
         setTimeout(function () { cp.textContent = 'Copiar link do cliente'; }, 1800);
       });
       var en = d.createElement('button'); en.type = 'button'; en.textContent = 'Encerrar'; en.style.color = '#ffb4a4';
       en.addEventListener('click', function () {
         if (!confirm('Encerrar a transmissão? O cliente verá que terminou.')) return;
-        fetch('/api/s/' + slug + '/encerrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ k: K }) }).then(function () { try { sessionStorage.removeItem('k:' + slug); } catch (_) { } location.href = '/apresentar'; });
+        fetch(BASE + '/api/s/' + slug + '/encerrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ k: K }) }).then(function () { try { sessionStorage.removeItem('k:' + slug); } catch (_) { } location.href = BASE + '/apresentar'; });
       });
       tx.appendChild(cp); tx.appendChild(en);
       var t, ult = -1, pend;
       function enviar() {
         var sh = window.miraDraw && window.miraDraw.getShapes ? norm(window.miraDraw.getShapes(), false) : [];
-        fetch('/api/s/' + slug + '/estado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ k: K, i: atual(), shapes: sh }) });
+        fetch(BASE + '/api/s/' + slug + '/estado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ k: K, i: atual(), shapes: sh }) });
       }
       function agenda(ms) { clearTimeout(t); t = setTimeout(enviar, ms); }
       addEventListener('scroll', function () { var i = atual(); if (i !== ult) { ult = i; agenda(350); } }, { passive: true });

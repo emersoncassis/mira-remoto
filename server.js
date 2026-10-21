@@ -9,6 +9,7 @@
      DECKS_DIR      pasta dos decks (./decks)
      PROTEGER       padrão da tela /apresentar: 1 = marca d'água e proteção ligadas, 0 = desligadas
      MARCA          texto padrão da marca d'água (CONFIDENCIAL)
+     BASE_PATH      prefixo quando o servidor roda numa subpasta do domínio, ex.: /apresenta (padrão: vazio, na raiz)
    Marca d'água e proteção são escolhidas a cada transmissão em /apresentar; estas duas só definem o padrão. */
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 
@@ -16,6 +17,7 @@ const PORT = +process.env.PORT || 3000;
 const PUB = path.join(__dirname, 'public');
 const DECKS = path.resolve(process.env.DECKS_DIR || path.join(__dirname, 'decks'));
 const PROTEGER = process.env.PROTEGER !== '0';
+const BASE = ('/' + String(process.env.BASE_PATH || '').replace(/^\/+|\/+$/g, '')).replace(/^\/$/, '').replace(/[^a-z0-9/_.-]/gi, '');   // '' ou '/apresenta'
 const MARCA = String(process.env.MARCA || 'CONFIDENCIAL').slice(0, 40);
 const bool = (v, padrao) => typeof v === 'boolean' ? v : padrao;
 const limpaMarca = v => String(v == null ? '' : v).replace(/[\u0000-\u001f<>&"]/g, '').trim().slice(0, 40) || MARCA;
@@ -133,13 +135,13 @@ function estatico(req, res, arquivo, cache, extra) {
 function prepararDeck(slug, s) {
   const deck = s.deck;
   let html = fs.readFileSync(path.join(DECKS, deck, 'index.html'), 'utf8');
-  const base = '<base href="/_d/' + deck + '/">';
+  const base = '<base href="' + BASE + '/_d/' + deck + '/">';
   html = /<base\b[^>]*>/i.test(html) ? html.replace(/<base\b[^>]*>/i, base) : html.replace(/<head\b[^>]*>/i, m => m + base);
   html = html.replace(/<script\b[^>]*mira-draw[^>]*>\s*<\/script>/gi, '');        // usa a versão do servidor, que tem a API de sincronia
   html = html.replace(/<script\b[^>]*\bsync\.js[^>]*>\s*<\/script>/gi, '');
-  const cfg = JSON.stringify({ marcaDagua: s.marcaDagua, protecao: s.protecao, marca: s.marca }).replace(/</g, '\\u003c');
+  const cfg = JSON.stringify({ marcaDagua: s.marcaDagua, protecao: s.protecao, marca: s.marca, base: BASE }).replace(/</g, '\\u003c');
   const tags = '<script>window.__MIRA_REMOTO__=' + cfg + ';</script>'
-    + '<script defer src="/_mira/mira-draw.js"></script><script defer src="/_mira/sync.js"></script>';
+    + '<script defer src="' + BASE + '/_mira/mira-draw.js"></script><script defer src="' + BASE + '/_mira/sync.js"></script>';
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, tags + '</body>') : html + tags;
 }
 
@@ -148,7 +150,9 @@ const PAG_404 = '<!doctype html><meta charset="utf-8"><meta name="viewport" cont
 const PAG_RESTRITO = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Acesso restrito</title><body style="' + ESTILO_PAG + '"><div><h1 style="font-size:1.4rem">Acesso restrito</h1><p style="opacity:.7">Esta apresentação é exibida apenas para convidados, por link enviado por quem apresenta.</p></div>';
 
 const servidor = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x'), p = url.pathname;
+  const url = new URL(req.url, 'http://x');
+  let p = url.pathname;
+  if (BASE && (p === BASE || p.startsWith(BASE + '/'))) p = p.slice(BASE.length) || '/';        // o proxy pode ou não remover o prefixo
   try {
     if (p === '/saude') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok'); }
 
@@ -240,7 +244,7 @@ const servidor = http.createServer(async (req, res) => {
       if (!s) { res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(PAG_404); }
       let html; try { html = prepararDeck(m[1], s); } catch (_) { res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Deck indisponível.'); }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow',
-        'Set-Cookie': 'ap=' + m[1] + '.' + assina(m[1]) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200'
+        'Set-Cookie': 'ap=' + m[1] + '.' + assina(m[1]) + '; Path=' + (BASE || '/') + '; HttpOnly; SameSite=Lax; Max-Age=43200'
           + (req.socket.encrypted || /^https/i.test(req.headers['x-forwarded-proto'] || '') ? '; Secure' : '') });   // Secure só em HTTPS (funciona também em http://localhost)
       return res.end(req.method === 'HEAD' ? undefined : html);
     }

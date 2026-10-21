@@ -9,6 +9,7 @@ services:
       PRESENTER_KEY: ${PRESENTER_KEY:?defina PRESENTER_KEY}
       PROTEGER: ${PROTEGER:-1}
       MARCA: ${MARCA:-CONFIDENCIAL}
+      BASE_PATH: ${BASE_PATH:-}
     expose:
       - "3000"
     # Para adicionar decks sem rebuildar, descomente (a pasta decks/ do servidor vira a fonte):

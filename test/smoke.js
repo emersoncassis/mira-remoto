@@ -55,7 +55,7 @@ servidor.listen(0, async () => {
     assert.strictEqual((await fetch(base + '/_d/outro-deck/index.html', H)).status, 404); passo('cookie só vale para o deck da própria sessão');
 
     /* marca d'água e proteção são escolhidas por transmissão */
-    const cfgDe = h => JSON.parse(/window\.__MIRA_REMOTO__=(\{.*?\});/.exec(h)[1]);
+    const cfgDe = h => { const c = JSON.parse(/window\.__MIRA_REMOTO__=(\{.*?\});/.exec(h)[1]); assert.strictEqual(c.base, ''); delete c.base; return c; };
     assert.deepStrictEqual(cfgDe(html), { marcaDagua: true, protecao: true, marca: 'CONFIDENCIAL' }); passo('padrão: marca d\'água e proteção ligadas');
     for (const [nome, corpo, esperado] of [
       ['sem-nada', { marcaDagua: false, protecao: false }, { marcaDagua: false, protecao: false, marca: 'CONFIDENCIAL' }],

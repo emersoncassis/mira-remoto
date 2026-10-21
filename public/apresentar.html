@@ -37,7 +37,8 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
 </form>
 <script>
 var $ = function (id) { return document.getElementById(id); };
-$('host').textContent = location.host;
+var BASE = location.pathname.replace(/\/apresentar\/?$/, '');
+$('host').textContent = location.host + BASE;
 var ultima = '', timer, lembrado = false;
 function mostraMarca() { $('linhaMarca').style.display = $('wm').checked ? 'flex' : 'none'; }
 try { var sv = JSON.parse(localStorage.getItem('mira-remoto:opcoes') || 'null'); if (sv) { $('wm').checked = !!sv.wm; $('prot').checked = !!sv.prot; $('marca').value = sv.marca || ''; lembrado = true; } } catch (_) { }
@@ -46,7 +47,7 @@ function listar() {
   var k = $('chave').value;
   if (!k || k === ultima) return;
   ultima = k;
-  fetch('/api/decks', { headers: { 'X-Chave': k } }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); }).then(function (x) {
+  fetch(BASE + '/api/decks', { headers: { 'X-Chave': k } }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); }).then(function (x) {
     var s = $('deck'); s.innerHTML = '';
     if (!x[0]) { s.disabled = true; s.innerHTML = '<option value="">Digite a chave para listar os decks</option>'; $('dica').textContent = x[1].erro || ''; return; }
     $('dica').textContent = '';
@@ -60,12 +61,12 @@ $('chave').addEventListener('input', function () { clearTimeout(timer); timer = 
 $('chave').addEventListener('change', listar);
 $('f').addEventListener('submit', function (ev) {
   ev.preventDefault(); var b = $('b'), e = $('e'); b.disabled = true; e.textContent = '';
-  fetch('/api/sessoes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  fetch(BASE + '/api/sessoes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chave: $('chave').value, deck: $('deck').value, nome: $('nome').value, marcaDagua: $('wm').checked, protecao: $('prot').checked, marca: $('marca').value }) })
   .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); }).then(function (x) {
     if (!x[0]) { e.textContent = x[1].erro || 'Não foi possível criar.'; b.disabled = false; return; }
     try { sessionStorage.setItem('k:' + x[1].slug, x[1].token); localStorage.setItem('mira-remoto:opcoes', JSON.stringify({ wm: $('wm').checked, prot: $('prot').checked, marca: $('marca').value })); } catch (_) { }
-    location.href = '/s/' + x[1].slug + '?k=' + x[1].token;
+    location.href = BASE + '/s/' + x[1].slug + '?k=' + x[1].token;
   }).catch(function () { e.textContent = 'Sem conexão com o servidor.'; b.disabled = false; });
 });
 </script></body></html>
