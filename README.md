@@ -69,7 +69,7 @@ docker run -d -p 3000:3000 -e PRESENTER_KEY=minha-chave mira-remoto
 
 Ou `PRESENTER_KEY=minha-chave docker compose up -d --build`. Para adicionar decks sem rebuildar: `-v $(pwd)/decks:/app/decks:ro`.
 
-**Dokploy:** Git, este repositório, Compose Path `./docker-compose.yml`. Em *Domains*, serviço `mira-remoto`, porta `3000`. Em *Environment*, defina `PRESENTER_KEY`. Use sempre HTTPS. Para trocar a chave, altere a variável e faça novo deploy.
+**Dokploy (recomendado: aplicação com Dockerfile):** crie uma *Application*, fonte Git deste repositório, branch `main`, Build Type `Dockerfile`. Em *Environment*, defina `PRESENTER_KEY` (e `BASE_PATH` se for numa subpasta, ex.: `/apresenta`). Em *Domains*, porta `3000`, HTTPS ligado e, se for subpasta, o mesmo caminho em *Path* (sem *Strip Path*). Para trocar a chave, altere a variável e faça novo deploy. Pelo *Compose* (`docker-compose.yml`) também funciona, mas algumas versões do Dokploy falham ao gravar o `.env` ao lado do arquivo.
 
 | Variável | Padrão | Função |
 |---|---|---|
