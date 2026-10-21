@@ -117,7 +117,9 @@ npm test
 
 A proposta de uma skill `/mira-remoto` está em [`docs/SUGESTAO-MIRA-ANIMATOR.md`](docs/SUGESTAO-MIRA-ANIMATOR.md).
 
-## Créditos e licença
+## Licença e créditos
 
-- **Mira** (mira-animator): Sandeco Macedo, <https://github.com/sandeco/mira-animator>. O tema, a estrutura dos slides e o `mira-draw.js` vêm dele e estão sob a licença do Mira, PolyForm Noncommercial 1.0.0 (uso não comercial).
-- mira-remoto: Emerson de Carvalho Assis. Este repositório ainda não define licença própria.
+**PolyForm Noncommercial 1.0.0**, a mesma do Mira: uso não comercial (pessoal, educacional, de pesquisa e por organizações sem fins comerciais). Não pode ser vendido nem embutido em software comercial. Veja o [LICENSE](LICENSE).
+
+- **Mira** (mira-animator): Sandeco Macedo, <https://github.com/sandeco/mira-animator>. O tema, a estrutura dos slides e o `mira-draw.js` vêm dele.
+- **mira-remoto**: Emerson de Carvalho Assis.

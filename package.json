@@ -9,5 +9,6 @@
     "start": "node server.js",
     "test": "node test/smoke.js",
     "tunel": "node tools/tunel.js"
-  }
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
 }
