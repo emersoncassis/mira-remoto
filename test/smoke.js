@@ -40,7 +40,7 @@ servidor.listen(0, async () => {
 
     const r = await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'Loja do João', deck: 'demo-mira-remoto' });
     assert.strictEqual(r.status, 201); const { slug, token } = await r.json(); assert.strictEqual(slug, 'loja-do-joao'); passo('sessão criada com slug limpo');
-    assert.strictEqual((await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'Loja do João' })).status, 409); passo('nome repetido dá 409');
+    assert.strictEqual((await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'Loja do João', deck: 'demo-mira-remoto' })).status, 409); passo('nome repetido dá 409');
     assert.strictEqual((await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'x', deck: '../etc' })).status, 400); passo('deck inválido dá 400');
 
     const pg = await fetch(base + '/s/' + slug), html = await pg.text(), ck = pg.headers.get('set-cookie').split(';')[0];
@@ -61,7 +61,7 @@ servidor.listen(0, async () => {
       ['sem-nada', { marcaDagua: false, protecao: false }, { marcaDagua: false, protecao: false, marca: 'CONFIDENCIAL' }],
       ['so-marca', { marcaDagua: true, protecao: false, marca: 'Acme <b>"2026"</b>' }, { marcaDagua: true, protecao: false, marca: 'Acme b2026/b' }],
       ['so-protecao', { marcaDagua: false, protecao: true }, { marcaDagua: false, protecao: true, marca: 'CONFIDENCIAL' }]]) {
-      const rr = await post('/api/sessoes', Object.assign({ chave: 'chave-de-teste', nome }, corpo)); assert.strictEqual(rr.status, 201);
+      const rr = await post('/api/sessoes', Object.assign({ chave: 'chave-de-teste', nome, deck: 'demo-mira-remoto' }, corpo)); assert.strictEqual(rr.status, 201);
       const jj = await rr.json(); assert.strictEqual(jj.marcaDagua, esperado.marcaDagua); assert.strictEqual(jj.protecao, esperado.protecao);
       const hh = await (await fetch(base + '/s/' + nome)).text(); assert.deepStrictEqual(cfgDe(hh), esperado);
       await post('/api/s/' + nome + '/encerrar', { k: jj.token });
@@ -85,7 +85,7 @@ servidor.listen(0, async () => {
     assert.strictEqual((await fetch(base + '/s/' + slug)).status, 404); passo('link some depois de encerrar');
     c.destroy(); p.destroy();
     /* long polling: a via de reserva quando o SSE não passa (Cloudflare Quick Tunnel) */
-    const r2 = await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'via-poll', marcaDagua: false, protecao: false }); const tk = (await r2.json()).token;
+    const r2 = await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'via-poll', deck: 'demo-mira-remoto', marcaDagua: false, protecao: false }); const tk = (await r2.json()).token;
     const poll = (c, v, q, k) => fetch(base + '/api/s/via-poll/poll?c=' + c + '&v=' + v + '&q=' + q + (k ? '&k=' + k : '')).then(r => r.json());
     const a1 = await poll('cli1', -1, -1); assert.strictEqual(a1.papel, 'cliente'); assert.strictEqual(a1.i, 0); passo('poll: primeira pergunta responde na hora, com o papel');
     const t0 = Date.now(); const a2 = await poll('cli1', a1.v, a1.q); assert.strictEqual(a2.v, a1.v); assert.ok(Date.now() - t0 >= 300 && !a2.papel); passo('poll: sem mudança, o servidor segura e responde no limite');
