@@ -11,6 +11,7 @@ services:
       MARCA: ${MARCA:-CONFIDENCIAL}
       BASE_PATH: ${BASE_PATH:-}
       UPLOADS_DIR: /data/uploads
+      LIMITE_ENVIOS: ${LIMITE_ENVIOS:-0}
     expose:
       - "3000"
     volumes:

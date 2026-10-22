@@ -38,6 +38,7 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
     <button type="button" id="enviar">Enviar deck</button>
     <div class="bar" id="bar"><i id="barI"></i></div>
     <div class="ok" id="okUp" role="status"></div>
+    <p class="dica" id="cota" hidden></p>
     <p class="dica">Compacte a pasta do deck do Mira (a que tem o <code>index.html</code>). Digite a chave acima antes de enviar.</p>
     <button type="button" class="ex" id="excluir" hidden>Excluir o deck enviado selecionado</button>
   </fieldset>
@@ -55,6 +56,11 @@ var $ = function (id) { return document.getElementById(id); };
 var BASE = location.pathname.replace(/\/(apresentar)?\/?$/, '');
 $('host').textContent = location.host + BASE;
 var ultima = '', timer, lembrado = false, enviados = [];
+function cota(e) {
+  var c = $('cota'); if (!e || !e.limite) { c.hidden = true; $('enviar').disabled = false; return; }
+  c.hidden = false; c.textContent = e.restantes > 0 ? 'Envios restantes neste ambiente de teste: ' + e.restantes + ' de ' + e.limite + '.' : 'Você usou os ' + e.limite + ' envios permitidos neste ambiente de teste.';
+  $('enviar').disabled = !(e.restantes > 0);
+}
 function mostraMarca() { $('linhaMarca').style.display = $('wm').checked ? 'flex' : 'none'; }
 try { var sv = JSON.parse(localStorage.getItem('mira-remoto:opcoes') || 'null'); if (sv) { $('wm').checked = !!sv.wm; $('prot').checked = !!sv.prot; $('marca').value = sv.marca || ''; lembrado = true; } } catch (_) { }
 $('wm').addEventListener('change', mostraMarca); mostraMarca();
@@ -68,7 +74,7 @@ function listar(forca, escolher) {
     $('dica').textContent = '';
     if (!lembrado && x[1].padrao) { $('wm').checked = x[1].padrao.marcaDagua; $('prot').checked = x[1].padrao.protecao; $('marca').placeholder = x[1].padrao.marca; }
     if (!x[1].decks.length) { s.disabled = true; s.innerHTML = '<option value="">Nenhum deck em decks/</option>'; return; }
-    enviados = x[1].enviados || [];
+    enviados = x[1].enviados || []; cota(x[1].envios);
     x[1].decks.forEach(function (d) { var o = document.createElement('option'); o.value = d; o.textContent = d + (enviados.indexOf(d) >= 0 ? ' (enviado)' : ''); s.appendChild(o); });
     s.disabled = false; if (escolher) s.value = escolher; atualizaExcluir();
   }).catch(function () { $('dica').textContent = 'Sem conexão com o servidor.'; });
@@ -88,9 +94,9 @@ $('enviar').addEventListener('click', function () {
   x.setRequestHeader('X-Chave', $('chave').value); x.setRequestHeader('Content-Type', 'application/zip');
   x.upload.onprogress = function (ev) { if (ev.lengthComputable) $('barI').style.width = Math.round(ev.loaded / ev.total * 100) + '%'; };
   x.onload = function () {
-    b.disabled = false; var j = {}; try { j = JSON.parse(x.responseText); } catch (_) { }
-    if (x.status === 201) { $('barI').style.width = '100%'; ok.textContent = '✔ Deck "' + j.deck + '" enviado (' + j.arquivos + ' arquivos). Já está selecionado em Deck.'; $('arq').value = ''; listar(true, j.deck); }
-    else { $('bar').style.display = 'none'; e.textContent = j.erro || (x.status === 413 ? 'Arquivo grande demais para o servidor.' : 'Não foi possível enviar (erro ' + x.status + ').'); }
+    var j = {}; b.disabled = false; try { j = JSON.parse(x.responseText); } catch (_) { }
+    if (x.status === 201) { $('barI').style.width = '100%'; ok.textContent = '✔ Deck "' + j.deck + '" enviado (' + j.arquivos + ' arquivos). Já está selecionado em Deck.'; $('arq').value = ''; cota(j.envios); listar(true, j.deck); }
+    else { $('bar').style.display = 'none'; if (j.envios) cota(j.envios); e.textContent = j.erro || (x.status === 413 ? 'Arquivo grande demais para o servidor.' : 'Não foi possível enviar (erro ' + x.status + ').'); }
   };
   x.onerror = function () { b.disabled = false; $('bar').style.display = 'none'; e.textContent = 'Sem conexão com o servidor.'; };
   x.send(f);

@@ -41,6 +41,7 @@ Em `/apresentar`, digite a chave e use **Ou envie um deck pronto (.zip)**: escol
 
 - O `index.html` pode estar na raiz do .zip ou dentro de uma única pasta (o nível extra é removido).
 - Só quem tem a chave envia ou exclui. Decks enviados podem ser substituídos (caixa "Substituir") ou excluídos; os decks do projeto, em `decks/`, nunca são alterados.
+- Para um ambiente público de teste, defina `LIMITE_ENVIOS=2` e cada pessoa poderá enviar só 2 decks. A contagem é por IP e fica guardada (sem o IP em claro) em `UPLOADS_DIR`, então sobrevive a reinícios. Atrás de uma rede compartilhada, várias pessoas dividem o mesmo IP e a mesma cota. Sem a variável, não há limite.
 - Limites: .zip até 150 MB (`UPLOAD_MAX_MB`), até 3000 arquivos, 400 MB descompactado. Não aceita arquivos com senha, links simbólicos, Zip64 nem caminhos fora da pasta.
 - Os decks enviados ficam em `UPLOADS_DIR` (`./uploads`; no Docker, `/data/uploads`). **Para não perdê-los a cada deploy, monte um volume persistente nesse caminho** (no Dokploy: *Advanced → Volumes → Volume Mount*, Mount Path `/data/uploads`; o `docker-compose.yml` já declara o volume).
 
@@ -88,6 +89,7 @@ Ou `PRESENTER_KEY=minha-chave docker compose up -d --build`. Para adicionar deck
 | `PROTEGER` | `1` | `0` abre o formulário com marca d'água e proteção desmarcadas |
 | `MARCA` | `CONFIDENCIAL` | texto padrão da marca d'água |
 | `UPLOADS_DIR` | `./uploads` | pasta dos decks enviados pela tela (`/data/uploads` no Docker) |
+| `LIMITE_ENVIOS` | `0` | máximo de envios de deck por pessoa (por IP), somando todos os envios; `0` = sem limite. Pensado para ambientes de teste/demonstração (ex.: `2`). Excluir um deck não devolve o envio |
 | `UPLOAD_MAX_MB` | `150` | tamanho máximo do .zip enviado |
 | `BASE_PATH` | vazio | prefixo quando roda numa subpasta do domínio, ex.: `/apresenta` (então `/apresenta` abre a tela de apresentar, que também fica em `/apresenta/apresentar`, e o link do cliente fica em `/apresenta/s/<nome>`) |
 | `POLL_MS` | `20000` | tempo que o servidor segura cada pergunta do polling (ms) |
@@ -125,7 +127,7 @@ O apresentador publica `{slide, desenho}` em `POST /api/s/<nome>/estado`; o serv
 npm test
 ```
 
-33 verificações, mais o teste do BASE_PATH e 19 do envio de decks: acesso restrito, chave, sessões, marca d'água e proteção, injeção no deck, bloqueio de `references/` e de path traversal, sincronia por SSE e por polling, pré-carregamento e encerramento.
+33 verificações, mais o teste do BASE_PATH 19 do envio de decks e 7 do limite de envios: acesso restrito, chave, sessões, marca d'água e proteção, injeção no deck, bloqueio de `references/` e de path traversal, sincronia por SSE e por polling, pré-carregamento e encerramento.
 
 ## Sugestão ao mira-animator
 

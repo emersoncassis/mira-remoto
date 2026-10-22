@@ -9,6 +9,7 @@
      DECKS_DIR      pasta dos decks que vêm no projeto (./decks), somente leitura
      UPLOADS_DIR    pasta dos decks enviados pela tela /apresentar (./uploads). Em produção, monte um volume aqui
      UPLOAD_MAX_MB  tamanho máximo do .zip enviado (150)
+     LIMITE_ENVIOS  máximo de envios de deck por pessoa (por IP), somando todos os envios feitos; 0 = sem limite (padrão)
      PROTEGER       padrão da tela /apresentar: 1 = marca d'água e proteção ligadas, 0 = desligadas
      MARCA          texto padrão da marca d'água (CONFIDENCIAL)
      BASE_PATH      prefixo quando o servidor roda numa subpasta do domínio, ex.: /apresenta (padrão: vazio, na raiz)
@@ -21,6 +22,7 @@ const PUB = path.join(__dirname, 'public');
 const DECKS = path.resolve(process.env.DECKS_DIR || path.join(__dirname, 'decks'));
 const UPLOADS = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, 'uploads'));
 const UPLOAD_MAX = Math.max(1, +process.env.UPLOAD_MAX_MB || 150) * 1048576;
+const LIMITE_ENVIOS = Math.max(0, parseInt(process.env.LIMITE_ENVIOS, 10) || 0);
 const PROTEGER = process.env.PROTEGER !== '0';
 const BASE = ('/' + String(process.env.BASE_PATH || '').replace(/^\/+|\/+$/g, '')).replace(/^\/$/, '').replace(/[^a-z0-9/_.-]/gi, '');   // '' ou '/apresenta'
 const MARCA = String(process.env.MARCA || 'CONFIDENCIAL').slice(0, 40);
@@ -46,6 +48,15 @@ function listarEm(dir) {
       .map(e => e.name);
   } catch (_) { return []; }
 }
+/* Contagem de envios por pessoa (IP), guardada em UPLOADS_DIR/.envios.json para sobreviver a reinícios. Excluir um deck não devolve o envio. */
+const ARQ_ENVIOS = () => path.join(UPLOADS, '.envios.json');
+let envios = null;
+const chaveEnvio = i => crypto.createHash('sha256').update('envios:' + i).digest('hex').slice(0, 24);   // não guarda o IP em claro
+function carregaEnvios() { if (!envios) { try { envios = JSON.parse(fs.readFileSync(ARQ_ENVIOS(), 'utf8')); } catch (_) { envios = {}; } } return envios; }
+function usadosEnvios(i) { return carregaEnvios()[chaveEnvio(i)] || 0; }
+function contaEnvio(i) { const e = carregaEnvios(), k = chaveEnvio(i); e[k] = (e[k] || 0) + 1; try { fs.mkdirSync(UPLOADS, { recursive: true }); fs.writeFileSync(ARQ_ENVIOS() + '.tmp', JSON.stringify(e)); fs.renameSync(ARQ_ENVIOS() + '.tmp', ARQ_ENVIOS()); } catch (x) { console.error('[mira-remoto] não gravou a contagem de envios:', x.message); } }
+function infoEnvios(i) { const u = usadosEnvios(i); return { limite: LIMITE_ENVIOS, usados: u, restantes: LIMITE_ENVIOS ? Math.max(0, LIMITE_ENVIOS - u) : null }; }
+
 function listarDecks() { return [...new Set([...listarEm(DECKS), ...listarEm(UPLOADS)])].sort(); }
 function listarEnviados() { const base = listarEm(DECKS); return listarEm(UPLOADS).filter(n => !base.includes(n)).sort(); }
 function pastaDoDeck(nome) {                      // os decks do projeto têm prioridade; depois os enviados
@@ -174,12 +185,13 @@ const servidor = http.createServer(async (req, res) => {
       const a = ip(req);
       if (bloqueado(a)) return json(res, 429, { erro: 'Muitas tentativas. Aguarde alguns minutos.' });
       if (!igualSeg(req.headers['x-chave'] || '', KEY)) { falhou(a); return json(res, 403, { erro: 'Chave incorreta.' }); }
-      return json(res, 200, { decks: listarDecks(), enviados: listarEnviados(), padrao: { marcaDagua: PROTEGER, protecao: PROTEGER, marca: MARCA } });
+      return json(res, 200, { decks: listarDecks(), enviados: listarEnviados(), envios: infoEnvios(a), padrao: { marcaDagua: PROTEGER, protecao: PROTEGER, marca: MARCA } });
     }
     if (p === '/api/decks' && req.method === 'POST') {            // envio de um deck pronto (.zip), só com a chave
       const a = ip(req);
       if (bloqueado(a)) return json(res, 429, { erro: 'Muitas tentativas. Aguarde alguns minutos.' });
       if (!igualSeg(req.headers['x-chave'] || '', KEY)) { falhou(a); return json(res, 403, { erro: 'Chave incorreta.' }); }
+      if (LIMITE_ENVIOS && usadosEnvios(a) >= LIMITE_ENVIOS) return json(res, 403, { erro: 'Você já usou os ' + LIMITE_ENVIOS + ' envios permitidos neste ambiente de teste.', envios: infoEnvios(a) });
       if (+req.headers['content-length'] > UPLOAD_MAX) { res.setHeader('Connection', 'close'); return json(res, 413, { erro: 'Arquivo grande demais (máximo ' + Math.round(UPLOAD_MAX / 1048576) + ' MB).' }); }
       const nome = String(url.searchParams.get('nome') || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\.zip$/i, '').replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-.]+$/g, '').slice(0, 60);
       if (!nome || !NOME_DECK.test(nome)) return json(res, 400, { erro: 'Dê um nome ao deck (letras, números, ponto, hífen e sublinhado).' });
@@ -201,7 +213,8 @@ const servidor = http.createServer(async (req, res) => {
         const final = path.join(UPLOADS, nome);
         if (existe) fs.rmSync(final, { recursive: true, force: true });
         fs.renameSync(tmp, final);
-        return json(res, 201, { deck: nome, arquivos: r.arquivos, bytes: r.bytes, substituido: existe });
+        contaEnvio(a);
+        return json(res, 201, { deck: nome, arquivos: r.arquivos, bytes: r.bytes, substituido: existe, envios: infoEnvios(a) });
       } catch (e) {
         fs.rmSync(tmp, { recursive: true, force: true });
         if (e instanceof zip.ErroZip) return json(res, 400, { erro: e.message });
