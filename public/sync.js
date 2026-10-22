@@ -49,12 +49,14 @@
     secs.forEach(function (s, i) { var r = s.getBoundingClientRect(); if (r.top <= meio && r.bottom > meio) achado = i; });
     return achado;
   }
-  function quadro() {                    // o slide é um quadro 16:9 centrado na janela
-    var W = innerWidth, H = innerHeight, w = Math.min(W, H * 16 / 9), h = w * 9 / 16;
-    return { l: (W - w) / 2, t: (H - h) / 2, w: w };
+  function quadro(i) {                   // o quadro 16:9 REAL do slide i, onde ele está agora na janela (não presume centralizado)
+    var s = secs[i], r = s && s.getBoundingClientRect();
+    if (r && r.width > 10) return { l: r.left, t: r.top, w: r.width };
+    var W = innerWidth, H = innerHeight, w = Math.min(W, H * 16 / 9);
+    return { l: (W - w) / 2, t: (H - w * 9 / 16) / 2, w: w };
   }
-  function norm(sh, inv) {               // traços do desenho: pixels <-> fração do quadro (igual em qualquer tela)
-    var q = quadro();
+  function norm(sh, inv, q) {            // traços do desenho: pixels <-> fração do quadro (igual em qualquer tela)
+    q = q || quadro(atual());
     var X = function (v) { return inv ? q.l + v * q.w : (v - q.l) / q.w; };
     var Y = function (v) { return inv ? q.t + v * q.w * 9 / 16 : (v - q.t) / (q.w * 9 / 16); };
     var Z = function (v) { return inv ? v * q.w / 1000 : v * 1000 / q.w; };      // espessura/tamanho do texto
@@ -76,10 +78,25 @@
     if (s.papel) { papel = s.papel; if (!pronto) montar(); }
     tx.classList.remove('off'); atualizaTxt(s);
     if (papel === 'cliente') {
-      alvo = s.i; if (carregado) ir(alvo);
+      var mudou = alvo !== s.i; alvo = s.i; ultShapes = s.shapes || [];
+      if (carregado) ir(alvo);
       if (s.papel) informar(pctAtual, carregado);
-      if (window.miraDraw && window.miraDraw.setShapes) window.miraDraw.setShapes(norm(s.shapes, true));
+      if (mudou && window.miraDraw && window.miraDraw.setShapes) window.miraDraw.setShapes([]);   // o desenho do slide anterior não fica pairando
+      aplicaDesenho();
     }
+  }
+  /* o desenho só entra com o slide parado no lugar: durante a rolagem suave o quadro ainda está em movimento */
+  var ultShapes = [], tokDes = 0;
+  function aplicaDesenho() {
+    var md = window.miraDraw; if (papel !== 'cliente' || !md || !md.setShapes || !carregado) return;
+    var tok = ++tokDes, antes = null, estavel = 0, t0 = Date.now();
+    (function quadroParado() {
+      if (tok !== tokDes) return;
+      var r = secs[alvo] && secs[alvo].getBoundingClientRect(), y = r ? Math.round(r.top * 2) : 0;
+      estavel = (y === antes) ? estavel + 1 : 0; antes = y;
+      if (estavel >= 3 || Date.now() - t0 > 2500) { md.setShapes(norm(ultShapes, true, quadro(alvo))); return; }
+      requestAnimationFrame(quadroParado);
+    })();
   }
   function conectar() {
     if (/(?:^|[?&])t=poll(?:&|$)/.test(location.search) || !window.EventSource) return poll();
@@ -118,16 +135,41 @@
   }
   var ultInf = 0, ultPct = -1, ultOk = false;
   function informar(p, ok) {
+    if (papel === 'apresentador') return;
     var agora = Date.now();
     if (!ok && (agora - ultInf < 450 || Math.abs(p - ultPct) < 2)) return;
     ultInf = agora; ultPct = p; ultOk = ok;
     fetch(BASE + '/api/s/' + slug + '/pronto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ c: idc, p: p, ok: !!ok }) }).catch(function () { });
   }
 
-  /* ---------- cliente: carrega TUDO antes de mostrar ---------- */
+  /* ---------- celular: pedir para girar e sugerir tela cheia ---------- */
+  var toque = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  function avisoGirar() {
+    if (!toque) return;
+    var s2 = d.createElement('style');
+    s2.textContent = '#gira{position:fixed;inset:0;z-index:2147483640;display:none;place-items:center;background:#0B0F0D;color:#F2FFF8;text-align:center;padding:28px;font:16px/1.5 system-ui,-apple-system,sans-serif}'
+      + '#gira svg{width:84px;height:84px;margin:0 auto 1rem;display:block;animation:vira 2.4s ease-in-out infinite}@keyframes vira{0%,25%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}'
+      + '@media (orientation:portrait){#gira{display:grid}}'
+      + '#dica{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483100;background:rgba(11,15,13,.88);color:#F2FFF8;border:1px solid #34E89E;border-radius:14px;padding:10px 16px;font:600 13px/1.4 system-ui,sans-serif;max-width:86vw;text-align:center;transition:opacity .6s}'
+      + '#fs-btn.pulsa{animation:pulsa 1.2s ease-in-out 5}@keyframes pulsa{50%{box-shadow:0 0 0 8px rgba(52,232,158,.35);border-color:#34E89E}}';
+    d.head.appendChild(s2);
+    var g = d.createElement('div'); g.id = 'gira';
+    g.innerHTML = '<div><svg viewBox="0 0 24 24" fill="none" stroke="#34E89E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><div style="font-weight:800;font-size:1.25rem">Gire o celular</div><div style="opacity:.75;margin-top:.4rem">A apresentação foi feita para a tela na horizontal.<br>Depois, toque em <b>⛶</b> para tela cheia.</div></div>';
+    d.body.appendChild(g);
+  }
+  function dicaTela() {
+    if (!toque || d.fullscreenElement || d.webkitFullscreenElement) return;
+    var tem = de.requestFullscreen || de.webkitRequestFullscreen;
+    var t = d.createElement('div'); t.id = 'dica';
+    t.textContent = tem ? 'Toque em ⛶ (canto superior direito) para ver em tela cheia' : 'Dica: gire o celular e use o modo tela cheia do navegador';
+    d.body.appendChild(t); if (tem) fb.classList.add('pulsa');
+    setTimeout(function () { t.style.opacity = 0; setTimeout(function () { t.remove(); }, 700); }, 7000);
+  }
+
+  /* ---------- carrega TUDO antes de mostrar (cliente e apresentador) ---------- */
   function carregarTudo() {
     var ov = d.createElement('div'); ov.id = 'carga';
-    ov.innerHTML = '<div><div class="sp"></div><div style="font-weight:700;font-size:1.15rem">Preparando a apresentação…</div><div class="b"><i></i></div><div class="t" style="opacity:.7;font-size:.9rem">Carregando <span class="p">0</span>% · mantenha esta página aberta</div></div>';
+    ov.innerHTML = '<div><div class="sp"></div><div style="font-weight:700;font-size:1.15rem">Preparando a apresentação…</div><div class="b"><i></i></div><div class="t" style="opacity:.7;font-size:.9rem">Carregando <span class="p">0</span>% · mantenha esta página aberta</div>' + (toque ? '<div style="margin-top:1.2rem;opacity:.85;font-size:.9rem;max-width:320px">📱 Gire o celular para <b>horizontal</b> e use a <b>tela cheia</b> (botão no canto) para ver melhor.</div>' : '') + '</div>';
     d.body.appendChild(ov);
     var barra = ov.querySelector('i'), pp = ov.querySelector('.p');
     var vids = [].slice.call(d.querySelectorAll('video')).map(function (v) {
@@ -137,10 +179,16 @@
       return { v: v, src: src, tipo: tipo, orig: orig, total: 0, bytes: 0, ok: false };
     });
     var imgs = [].slice.call(d.images), imgOk = 0, melhor = 0;
+    /* frames de fundo (canvas[data-frames] + data-n): o deck os pinta a partir do cache, então baixamos todos aqui antes de liberar */
+    window.__miraFrames = window.__miraFrames || [];
+    [].forEach.call(d.querySelectorAll('canvas[data-frames]'), function (cv) {
+      var base = cv.getAttribute('data-frames'), n = +cv.getAttribute('data-n') || 0;
+      for (var k = 1; k <= n; k++) { var im = new Image(); im.decoding = 'async'; im.src = base + 'f' + ('00' + k).slice(-3) + '.webp'; imgs.push(im); window.__miraFrames.push(im); }
+    });
     function prog() {
       var tot = 0, got = 0; vids.forEach(function (t) { tot += t.total; got += Math.min(t.bytes, t.total || t.bytes); });
       var fv = tot ? got / tot : 0, fi = imgs.length ? imgOk / imgs.length : 1;
-      var pct = Math.min(99, Math.round((fv * 0.88 + fi * 0.12) * 100)); if (pct > melhor) melhor = pct;
+      var pct = Math.min(99, Math.round((tot ? fv * 0.6 + fi * 0.4 : fi) * 100)); if (pct > melhor) melhor = pct;
       pctAtual = melhor; barra.style.width = melhor + '%'; pp.textContent = melhor; informar(melhor, false);
     }
     var pI = Promise.all(imgs.map(function (im) {
@@ -179,9 +227,10 @@
       return new Promise(function (ok) { setTimeout(ok, 400); });          // deixa os scripts do deck assentarem
     }).then(function () {
       carregado = true; pctAtual = 100; barra.style.width = '100%'; pp.textContent = '100';
-      d.documentElement.style.scrollBehavior = 'auto'; var q = secs[alvo]; if (q) q.scrollIntoView({ block: 'start' }); d.documentElement.style.scrollBehavior = '';
+      if (papel === 'cliente') { d.documentElement.style.scrollBehavior = 'auto'; var q = secs[alvo]; if (q) q.scrollIntoView({ block: 'start' }); d.documentElement.style.scrollBehavior = ''; }
       informar(100, true);
-      ov.style.opacity = 0; setTimeout(function () { ov.remove(); }, 600);
+      ov.style.opacity = 0; setTimeout(function () { ov.remove(); aplicaDesenho(); dicaTela(); }, 600);
+      window.__miraCarregado = true; try { window.dispatchEvent(new Event('mira-carregado')); } catch (_) { }
     });
     prog();
   }
@@ -240,7 +289,7 @@
   function montar() {
     pronto = true;
     if (papel === 'apresentador') {
-      tx.className = 'a'; 
+      tx.className = 'a'; carregarTudo();
       var cp = d.createElement('button'); cp.type = 'button'; cp.textContent = 'Copiar link do cliente';
       cp.addEventListener('click', function () {
         var l = location.origin + BASE + '/s/' + slug;
@@ -255,7 +304,7 @@
       tx.appendChild(cp); tx.appendChild(en);
       var t, ult = -1, pend;
       function enviar() {
-        var sh = window.miraDraw && window.miraDraw.getShapes ? norm(window.miraDraw.getShapes(), false) : [];
+        var sh = window.miraDraw && window.miraDraw.getShapes ? norm(window.miraDraw.getShapes(), false, quadro(atual())) : [];
         fetch(BASE + '/api/s/' + slug + '/estado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ k: K, i: atual(), shapes: sh }) });
       }
       function agenda(ms) { clearTimeout(t); t = setTimeout(enviar, ms); }
@@ -264,6 +313,7 @@
       setTimeout(function () { enviar(); }, 800);
       addEventListener('keydown', tecla);
     } else {
+      window.__MIRA_REMOTE_STAGE__ = true;   // o desenho do cliente vem do apresentador (não deixa o deck trocar por slide)
       carregarTudo();
       if (CFG.marcaDagua !== false) marcaDagua();
       if (CFG.protecao !== false) proteger();
@@ -272,8 +322,9 @@
       var st2 = d.createElement('style'); st2.textContent = 'html,body{overflow:hidden!important}'; d.head.appendChild(st2);
       addEventListener('keydown', function (e) { if (e.key === 'f' || e.key === 'F') { tecla(e); return; } e.preventDefault(); e.stopImmediatePropagation(); }, true);
       ['wheel', 'touchmove'].forEach(function (n) { addEventListener(n, function (e) { e.preventDefault(); }, { passive: false }); });
-      addEventListener('resize', function () { ir(alvo); });
+      addEventListener('resize', function () { ir(alvo); aplicaDesenho(); });
     }
   }
+  avisoGirar();
   conectar();
 })();

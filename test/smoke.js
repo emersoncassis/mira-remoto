@@ -40,6 +40,8 @@ servidor.listen(0, async () => {
 
     const r = await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'Loja do João', deck: 'demo-mira-remoto' });
     assert.strictEqual(r.status, 201); const { slug, token } = await r.json(); assert.strictEqual(slug, 'loja-do-joao'); passo('sessão criada com slug limpo');
+    { const hh = await (await fetch(base + '/s/' + slug, { headers: { 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': 'ex.com' } })).text();
+      assert.ok(hh.includes('property="og:title"') && hh.includes('property="og:url" content="https://ex.com/s/' + slug + '"') && hh.includes('og:image')); const og = await fetch(base + '/s/' + slug + '/og'); assert.strictEqual(og.status, 200); assert.strictEqual(og.headers.get('content-type'), 'image/jpeg'); passo('link do cliente traz metadados e imagem de prévia'); }
     assert.strictEqual((await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'Loja do João', deck: 'demo-mira-remoto' })).status, 409); passo('nome repetido dá 409');
     assert.strictEqual((await post('/api/sessoes', { chave: 'chave-de-teste', nome: 'x', deck: '../etc' })).status, 400); passo('deck inválido dá 400');
 

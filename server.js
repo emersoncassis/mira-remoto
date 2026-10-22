@@ -156,11 +156,38 @@ function estatico(req, res, arquivo, cache, extra) {
 
 /* O deck do Mira NÃO precisa ser editado: o servidor injeta, na hora de entregar, o <base> (para os caminhos
    relativos assets/... e mira/... funcionarem), a configuração e os scripts de telestrator e de sincronia. */
-function prepararDeck(slug, s) {
+/* Metadados do link (prévia no WhatsApp, Telegram, Slack, e-mail): título e descrição vêm do próprio deck
+   (<title> e <meta name="description">); a imagem é og.jpg/png/webp na raiz do deck, servida em /s/<slug>/og
+   sem exigir cookie, porque o robô que gera a prévia não tem sessão. */
+const OG_ARQ = ['og.jpg', 'og.jpeg', 'og.png', 'og.webp'];
+function imagemOg(deck) { const raiz = pastaDoDeck(deck); if (!raiz) return null; for (const n of OG_ARQ) { const a = path.join(raiz, n); if (fs.existsSync(a)) return a; } return null; }
+const escAttr = t => String(t).replace(/&(?!(?:[a-z]+|#\d+);)/gi, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function metaLink(html, slug, deck, req) {
+  const tit = (/<title[^>]*>([^<]*)<\/title>/i.exec(html) || [])[1] || deck;
+  const tagD = /<meta\b[^>]*name=["']description["'][^>]*>/i.exec(html);
+  const desc = (tagD && /content=["']([^"']*)["']/i.exec(tagD[0]) || [])[1] || 'Apresentação ao vivo: você acompanha em tempo real, direto no navegador.';
+  const proto = (req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http')).split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const url = proto + '://' + host + BASE + '/s/' + slug;
+  const img = imagemOg(deck) ? url + '/og' : null;
+  const t = escAttr(tit.trim()), d = escAttr(desc.trim());
+  html = html.replace(/<meta\b[^>]*(?:property|name)=["'](?:og|twitter):[^>]*>/gi, '');
+  if (!tagD) html = html.replace(/<head\b[^>]*>/i, m => m + '<meta name="description" content="' + d + '">');
+  return html.replace(/<head\b[^>]*>/i, m => m
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="' + 'Mira Remoto' + '">'
+    + '<meta property="og:title" content="' + t + '"><meta property="og:description" content="' + d + '"><meta property="og:url" content="' + escAttr(url) + '">'
+    + '<meta property="og:locale" content="pt_BR">'
+    + (img ? '<meta property="og:image" content="' + escAttr(img) + '"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:image" content="' + escAttr(img) + '">' : '')
+    + '<meta name="twitter:card" content="' + (img ? 'summary_large_image' : 'summary') + '"><meta name="twitter:title" content="' + t + '"><meta name="twitter:description" content="' + d + '">'
+    + '<meta name="theme-color" content="#0B0F0D">');
+}
+
+function prepararDeck(slug, s, req) {
   const deck = s.deck;
   let html = fs.readFileSync(path.join(pastaDoDeck(deck), 'index.html'), 'utf8');
   const base = '<base href="' + BASE + '/_d/' + deck + '/">';
   html = /<base\b[^>]*>/i.test(html) ? html.replace(/<base\b[^>]*>/i, base) : html.replace(/<head\b[^>]*>/i, m => m + base);
+  html = metaLink(html, slug, deck, req);
   html = html.replace(/<script\b[^>]*mira-draw[^>]*>\s*<\/script>/gi, '');        // usa a versão do servidor, que tem a API de sincronia
   html = html.replace(/<script\b[^>]*\bsync\.js[^>]*>\s*<\/script>/gi, '');
   const cfg = JSON.stringify({ marcaDagua: s.marcaDagua, protecao: s.protecao, marca: s.marca, base: BASE }).replace(/</g, '\\u003c');
@@ -306,11 +333,17 @@ const servidor = http.createServer(async (req, res) => {
 
     /* --- páginas --- */
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+    m = /^\/s\/([a-z0-9-]+)\/og$/.exec(p);                         // imagem da prévia do link (pública, só desta sessão ativa)
+    if (m) {
+      const so = sessoes.get(m[1]), ai = so && imagemOg(so.deck);
+      if (!ai) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Sem imagem'); }
+      return estatico(req, res, ai, true);
+    }
     m = /^\/s\/([a-z0-9-]+)\/?$/.exec(p);
     if (m) {
       const s = sessoes.get(m[1]);
       if (!s) { res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(PAG_404); }
-      let html; try { html = prepararDeck(m[1], s); } catch (_) { res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Deck indisponível.'); }
+      let html; try { html = prepararDeck(m[1], s, req); } catch (_) { res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Deck indisponível.'); }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow',
         'Set-Cookie': 'ap=' + m[1] + '.' + assina(m[1]) + '; Path=' + (BASE || '/') + '; HttpOnly; SameSite=Lax; Max-Age=43200'
           + (req.socket.encrypted || /^https/i.test(req.headers['x-forwarded-proto'] || '') ? '; Secure' : '') });   // Secure só em HTTPS (funciona também em http://localhost)
