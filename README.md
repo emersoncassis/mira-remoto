@@ -35,6 +35,15 @@ Limites do túnel gratuito:
 
 **Para uso profissional, prefira domínio próprio:** endereço fixo com a sua marca, sem depender do seu computador. Use um servidor com HTTPS (seção Deploy) ou um Cloudflare Tunnel nomeado com domínio seu.
 
+## Enviar um deck pronto pela tela (.zip)
+
+Em `/apresentar`, digite a chave e use **Ou envie um deck pronto (.zip)**: escolha o .zip da pasta do deck do Mira, dê um nome e clique em **Enviar deck**. Ele passa a aparecer na lista de decks, já selecionado. Sem reiniciar o servidor.
+
+- O `index.html` pode estar na raiz do .zip ou dentro de uma única pasta (o nível extra é removido).
+- Só quem tem a chave envia ou exclui. Decks enviados podem ser substituídos (caixa "Substituir") ou excluídos; os decks do projeto, em `decks/`, nunca são alterados.
+- Limites: .zip até 150 MB (`UPLOAD_MAX_MB`), até 3000 arquivos, 400 MB descompactado. Não aceita arquivos com senha, links simbólicos, Zip64 nem caminhos fora da pasta.
+- Os decks enviados ficam em `UPLOADS_DIR` (`./uploads`; no Docker, `/data/uploads`). **Para não perdê-los a cada deploy, monte um volume persistente nesse caminho** (no Dokploy: *Advanced → Volumes → Volume Mount*, Mount Path `/data/uploads`; o `docker-compose.yml` já declara o volume).
+
 ## Colocar o seu deck do Mira
 
 1. Copie a pasta do deck (a que tem o `index.html`) para `decks/`: `cp -r meu-deck decks/meu-deck`
@@ -78,6 +87,8 @@ Ou `PRESENTER_KEY=minha-chave docker compose up -d --build`. Para adicionar deck
 | `DECKS_DIR` | `./decks` | pasta dos decks |
 | `PROTEGER` | `1` | `0` abre o formulário com marca d'água e proteção desmarcadas |
 | `MARCA` | `CONFIDENCIAL` | texto padrão da marca d'água |
+| `UPLOADS_DIR` | `./uploads` | pasta dos decks enviados pela tela (`/data/uploads` no Docker) |
+| `UPLOAD_MAX_MB` | `150` | tamanho máximo do .zip enviado |
 | `BASE_PATH` | vazio | prefixo quando roda numa subpasta do domínio, ex.: `/apresenta` (então `/apresenta` abre a tela de apresentar, que também fica em `/apresenta/apresentar`, e o link do cliente fica em `/apresenta/s/<nome>`) |
 | `POLL_MS` | `20000` | tempo que o servidor segura cada pergunta do polling (ms) |
 
@@ -97,6 +108,8 @@ O apresentador publica `{slide, desenho}` em `POST /api/s/<nome>/estado`; o serv
 |---|---|
 | `GET /apresentar` | formulário: chave, deck, nome, marca d'água e proteção |
 | `GET /api/decks` | lista os decks (header `X-Chave`) |
+| `POST /api/decks?nome=<nome>[&substituir=1]` | envia um deck (.zip no corpo, header `X-Chave`) |
+| `DELETE /api/decks/<nome>` | exclui um deck enviado (header `X-Chave`) |
 | `POST /api/sessoes` | cria a transmissão `{chave, deck, nome, marcaDagua, protecao, marca}` |
 | `GET /s/<nome>` | entrega o deck com a camada de sincronia |
 | `GET /api/s/<nome>/eventos` | canal SSE (`?k=<token>` entra como apresentador) |
@@ -112,7 +125,7 @@ O apresentador publica `{slide, desenho}` em `POST /api/s/<nome>/estado`; o serv
 npm test
 ```
 
-33 verificações (mais um teste do BASE_PATH): acesso restrito, chave, sessões, marca d'água e proteção, injeção no deck, bloqueio de `references/` e de path traversal, sincronia por SSE e por polling, pré-carregamento e encerramento.
+33 verificações, mais o teste do BASE_PATH e 19 do envio de decks: acesso restrito, chave, sessões, marca d'água e proteção, injeção no deck, bloqueio de `references/` e de path traversal, sincronia por SSE e por polling, pré-carregamento e encerramento.
 
 ## Sugestão ao mira-animator
 

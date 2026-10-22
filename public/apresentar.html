@@ -14,6 +14,10 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
 .op{margin:1.1rem 0 0;padding:.6rem .9rem .8rem;border:1px solid rgba(255,255,255,.12);border-radius:12px}.op legend{padding:0 .4rem;font-size:.8rem;color:#9db3a8}
 .ck{display:flex;gap:.55rem;align-items:flex-start;margin:.5rem 0;font-size:.88rem;color:#dfeae4;cursor:pointer}.ck input{width:auto;margin-top:.25rem;accent-color:#34E89E}
 #linhaMarca{margin:.1rem 0 .3rem 1.6rem}#linhaMarca input{padding:.5rem .7rem;font-size:.85rem}
+.up{margin:1.1rem 0 0;padding:.6rem .9rem .9rem;border:1px dashed rgba(52,232,158,.35);border-radius:12px}.up legend{padding:0 .4rem;font-size:.8rem;color:#9db3a8}
+.up input[type=file]{padding:.55rem;font-size:.85rem}.up button{margin-top:.8rem;background:transparent;color:#34E89E;border:1px solid #34E89E;padding:.65rem}
+.bar{height:6px;border-radius:99px;background:rgba(255,255,255,.1);margin-top:.7rem;overflow:hidden;display:none}.bar i{display:block;height:100%;width:0;background:#34E89E;transition:width .2s}
+.ok{color:#7ff0bf;font-size:.88rem;margin-top:.6rem;min-height:1.2em}.ex{margin-top:.5rem;background:none!important;border:0!important;color:#ffb4a4!important;font-size:.8rem;width:auto!important;padding:0!important;text-decoration:underline;cursor:pointer}
 .rodape{margin-top:1rem;font-size:.75rem;color:#6f857a;text-align:center}
 </style></head><body>
 <form class="c" id="f" autocomplete="off">
@@ -26,6 +30,17 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
   <p class="dica" id="dica"></p>
   <label for="nome">Nome do link (opcional)</label>
   <div class="pre"><span id="host"></span><span>/s/</span><input id="nome" maxlength="40" placeholder="ex.: loja-do-joao"></div>
+  <fieldset class="up" id="up"><legend>Ou envie um deck pronto (.zip)</legend>
+    <input id="arq" type="file" accept=".zip,application/zip,application/x-zip-compressed">
+    <label for="nomeDeck">Nome do deck</label>
+    <input id="nomeDeck" maxlength="60" placeholder="ex.: proposta-loja-joao">
+    <label class="ck"><input type="checkbox" id="subst"> Substituir se já existir um deck enviado com esse nome</label>
+    <button type="button" id="enviar">Enviar deck</button>
+    <div class="bar" id="bar"><i id="barI"></i></div>
+    <div class="ok" id="okUp" role="status"></div>
+    <p class="dica">Compacte a pasta do deck do Mira (a que tem o <code>index.html</code>). Digite a chave acima antes de enviar.</p>
+    <button type="button" class="ex" id="excluir" hidden>Excluir o deck enviado selecionado</button>
+  </fieldset>
   <fieldset class="op"><legend>Para quem assiste</legend>
     <label class="ck"><input type="checkbox" id="wm" checked> Marca d'água (nome do link, código do visitante e data)</label>
     <div class="pre" id="linhaMarca"><span>Texto:</span><input id="marca" maxlength="40" placeholder="CONFIDENCIAL"></div>
@@ -39,13 +54,13 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
 var $ = function (id) { return document.getElementById(id); };
 var BASE = location.pathname.replace(/\/(apresentar)?\/?$/, '');
 $('host').textContent = location.host + BASE;
-var ultima = '', timer, lembrado = false;
+var ultima = '', timer, lembrado = false, enviados = [];
 function mostraMarca() { $('linhaMarca').style.display = $('wm').checked ? 'flex' : 'none'; }
 try { var sv = JSON.parse(localStorage.getItem('mira-remoto:opcoes') || 'null'); if (sv) { $('wm').checked = !!sv.wm; $('prot').checked = !!sv.prot; $('marca').value = sv.marca || ''; lembrado = true; } } catch (_) { }
 $('wm').addEventListener('change', mostraMarca); mostraMarca();
-function listar() {
+function listar(forca, escolher) {
   var k = $('chave').value;
-  if (!k || k === ultima) return;
+  if (!k || (k === ultima && !forca)) return;
   ultima = k;
   fetch(BASE + '/api/decks', { headers: { 'X-Chave': k } }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); }).then(function (x) {
     var s = $('deck'); s.innerHTML = '';
@@ -53,10 +68,38 @@ function listar() {
     $('dica').textContent = '';
     if (!lembrado && x[1].padrao) { $('wm').checked = x[1].padrao.marcaDagua; $('prot').checked = x[1].padrao.protecao; $('marca').placeholder = x[1].padrao.marca; }
     if (!x[1].decks.length) { s.disabled = true; s.innerHTML = '<option value="">Nenhum deck em decks/</option>'; return; }
-    x[1].decks.forEach(function (d) { var o = document.createElement('option'); o.value = d; o.textContent = d; s.appendChild(o); });
-    s.disabled = false;
+    enviados = x[1].enviados || [];
+    x[1].decks.forEach(function (d) { var o = document.createElement('option'); o.value = d; o.textContent = d + (enviados.indexOf(d) >= 0 ? ' (enviado)' : ''); s.appendChild(o); });
+    s.disabled = false; if (escolher) s.value = escolher; atualizaExcluir();
   }).catch(function () { $('dica').textContent = 'Sem conexão com o servidor.'; });
 }
+function atualizaExcluir() { $('excluir').hidden = enviados.indexOf($('deck').value) < 0; }
+$('deck').addEventListener('change', atualizaExcluir);
+$('arq').addEventListener('change', function () {
+  var f = $('arq').files[0]; if (f && !$('nomeDeck').value) $('nomeDeck').value = f.name.replace(/\.zip$/i, '').replace(/[^a-z0-9._-]+/gi, '-').toLowerCase();
+});
+$('enviar').addEventListener('click', function () {
+  var f = $('arq').files[0], ok = $('okUp'), e = $('e'); ok.textContent = ''; e.textContent = '';
+  if (!$('chave').value) { e.textContent = 'Digite a chave de acesso.'; return; }
+  if (!f) { e.textContent = 'Escolha o arquivo .zip do deck.'; return; }
+  var nome = $('nomeDeck').value || f.name;
+  var x = new XMLHttpRequest(), b = $('enviar'); b.disabled = true; $('bar').style.display = 'block'; $('barI').style.width = '0';
+  x.open('POST', BASE + '/api/decks?nome=' + encodeURIComponent(nome) + ($('subst').checked ? '&substituir=1' : ''));
+  x.setRequestHeader('X-Chave', $('chave').value); x.setRequestHeader('Content-Type', 'application/zip');
+  x.upload.onprogress = function (ev) { if (ev.lengthComputable) $('barI').style.width = Math.round(ev.loaded / ev.total * 100) + '%'; };
+  x.onload = function () {
+    b.disabled = false; var j = {}; try { j = JSON.parse(x.responseText); } catch (_) { }
+    if (x.status === 201) { $('barI').style.width = '100%'; ok.textContent = '✔ Deck "' + j.deck + '" enviado (' + j.arquivos + ' arquivos). Já está selecionado em Deck.'; $('arq').value = ''; listar(true, j.deck); }
+    else { $('bar').style.display = 'none'; e.textContent = j.erro || (x.status === 413 ? 'Arquivo grande demais para o servidor.' : 'Não foi possível enviar (erro ' + x.status + ').'); }
+  };
+  x.onerror = function () { b.disabled = false; $('bar').style.display = 'none'; e.textContent = 'Sem conexão com o servidor.'; };
+  x.send(f);
+});
+$('excluir').addEventListener('click', function () {
+  var d = $('deck').value; if (!d || !confirm('Excluir o deck enviado "' + d + '"? Isso não pode ser desfeito.')) return;
+  fetch(BASE + '/api/decks/' + encodeURIComponent(d), { method: 'DELETE', headers: { 'X-Chave': $('chave').value } }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
+  .then(function (x) { if (!x[0]) { $('e').textContent = x[1].erro || 'Não foi possível excluir.'; return; } $('okUp').textContent = 'Deck "' + d + '" excluído.'; listar(true); });
+});
 $('chave').addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(listar, 600); });
 $('chave').addEventListener('change', listar);
 $('f').addEventListener('submit', function (ev) {

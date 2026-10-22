@@ -6,7 +6,9 @@
    Variáveis de ambiente:
      PORT           porta (3000)
      PRESENTER_KEY  chave de quem apresenta (se faltar, é gerada e mostrada no log)
-     DECKS_DIR      pasta dos decks (./decks)
+     DECKS_DIR      pasta dos decks que vêm no projeto (./decks), somente leitura
+     UPLOADS_DIR    pasta dos decks enviados pela tela /apresentar (./uploads). Em produção, monte um volume aqui
+     UPLOAD_MAX_MB  tamanho máximo do .zip enviado (150)
      PROTEGER       padrão da tela /apresentar: 1 = marca d'água e proteção ligadas, 0 = desligadas
      MARCA          texto padrão da marca d'água (CONFIDENCIAL)
      BASE_PATH      prefixo quando o servidor roda numa subpasta do domínio, ex.: /apresenta (padrão: vazio, na raiz)
@@ -14,8 +16,11 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 
 const PORT = +process.env.PORT || 3000;
+const zip = require('./zip.js');
 const PUB = path.join(__dirname, 'public');
 const DECKS = path.resolve(process.env.DECKS_DIR || path.join(__dirname, 'decks'));
+const UPLOADS = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, 'uploads'));
+const UPLOAD_MAX = Math.max(1, +process.env.UPLOAD_MAX_MB || 150) * 1048576;
 const PROTEGER = process.env.PROTEGER !== '0';
 const BASE = ('/' + String(process.env.BASE_PATH || '').replace(/^\/+|\/+$/g, '')).replace(/^\/$/, '').replace(/[^a-z0-9/_.-]/gi, '');   // '' ou '/apresenta'
 const MARCA = String(process.env.MARCA || 'CONFIDENCIAL').slice(0, 40);
@@ -33,12 +38,20 @@ const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascr
 const BLOQUEADO = /(^|\/)(references|node_modules)(\/|$)|(^|\/)\.|\.(md|cjs|bat|command|sh|ps1|map)$/i;
 
 /* ---------- decks ---------- */
-function listarDecks() {
+const NOME_DECK = /^[a-z0-9][a-z0-9._-]*$/i;
+function listarEm(dir) {
   try {
-    return fs.readdirSync(DECKS, { withFileTypes: true })
-      .filter(e => e.isDirectory() && /^[a-z0-9][a-z0-9._-]*$/i.test(e.name) && fs.existsSync(path.join(DECKS, e.name, 'index.html')))
-      .map(e => e.name).sort();
+    return fs.readdirSync(dir, { withFileTypes: true })
+      .filter(e => e.isDirectory() && NOME_DECK.test(e.name) && fs.existsSync(path.join(dir, e.name, 'index.html')))
+      .map(e => e.name);
   } catch (_) { return []; }
+}
+function listarDecks() { return [...new Set([...listarEm(DECKS), ...listarEm(UPLOADS)])].sort(); }
+function listarEnviados() { const base = listarEm(DECKS); return listarEm(UPLOADS).filter(n => !base.includes(n)).sort(); }
+function pastaDoDeck(nome) {                      // os decks do projeto têm prioridade; depois os enviados
+  if (!NOME_DECK.test(nome)) return null;
+  for (const dir of [DECKS, UPLOADS]) { const p = path.join(dir, nome); if (fs.existsSync(path.join(p, 'index.html'))) return p; }
+  return null;
 }
 
 /* ---------- sessões em memória ---------- */
@@ -134,7 +147,7 @@ function estatico(req, res, arquivo, cache, extra) {
    relativos assets/... e mira/... funcionarem), a configuração e os scripts de telestrator e de sincronia. */
 function prepararDeck(slug, s) {
   const deck = s.deck;
-  let html = fs.readFileSync(path.join(DECKS, deck, 'index.html'), 'utf8');
+  let html = fs.readFileSync(path.join(pastaDoDeck(deck), 'index.html'), 'utf8');
   const base = '<base href="' + BASE + '/_d/' + deck + '/">';
   html = /<base\b[^>]*>/i.test(html) ? html.replace(/<base\b[^>]*>/i, base) : html.replace(/<head\b[^>]*>/i, m => m + base);
   html = html.replace(/<script\b[^>]*mira-draw[^>]*>\s*<\/script>/gi, '');        // usa a versão do servidor, que tem a API de sincronia
@@ -161,7 +174,49 @@ const servidor = http.createServer(async (req, res) => {
       const a = ip(req);
       if (bloqueado(a)) return json(res, 429, { erro: 'Muitas tentativas. Aguarde alguns minutos.' });
       if (!igualSeg(req.headers['x-chave'] || '', KEY)) { falhou(a); return json(res, 403, { erro: 'Chave incorreta.' }); }
-      return json(res, 200, { decks: listarDecks(), padrao: { marcaDagua: PROTEGER, protecao: PROTEGER, marca: MARCA } });
+      return json(res, 200, { decks: listarDecks(), enviados: listarEnviados(), padrao: { marcaDagua: PROTEGER, protecao: PROTEGER, marca: MARCA } });
+    }
+    if (p === '/api/decks' && req.method === 'POST') {            // envio de um deck pronto (.zip), só com a chave
+      const a = ip(req);
+      if (bloqueado(a)) return json(res, 429, { erro: 'Muitas tentativas. Aguarde alguns minutos.' });
+      if (!igualSeg(req.headers['x-chave'] || '', KEY)) { falhou(a); return json(res, 403, { erro: 'Chave incorreta.' }); }
+      if (+req.headers['content-length'] > UPLOAD_MAX) { res.setHeader('Connection', 'close'); return json(res, 413, { erro: 'Arquivo grande demais (máximo ' + Math.round(UPLOAD_MAX / 1048576) + ' MB).' }); }
+      const nome = String(url.searchParams.get('nome') || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\.zip$/i, '').replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-.]+$/g, '').slice(0, 60);
+      if (!nome || !NOME_DECK.test(nome)) return json(res, 400, { erro: 'Dê um nome ao deck (letras, números, ponto, hífen e sublinhado).' });
+      if (listarEm(DECKS).includes(nome)) return json(res, 409, { erro: 'Já existe um deck do projeto com esse nome. Escolha outro.' });
+      const existe = listarEm(UPLOADS).includes(nome), substituir = url.searchParams.get('substituir') === '1';
+      if (existe && !substituir) return json(res, 409, { erro: 'Já existe um deck enviado com esse nome. Marque "substituir" ou escolha outro nome.' });
+      if (existe) for (const s of sessoes.values()) if (s.deck === nome) return json(res, 409, { erro: 'Esse deck está em transmissão agora. Encerre antes de substituir.' });
+      const partes = []; let n = 0;
+      try {
+        await new Promise((ok, no) => {
+          req.on('data', d => { n += d.length; if (n > UPLOAD_MAX) { no(new Error('GRANDE')); } else partes.push(d); });
+          req.on('end', ok); req.on('error', no); req.on('aborted', () => no(new Error('ABORT')));
+        });
+      } catch (e) { return json(res, e.message === 'GRANDE' ? 413 : 400, { erro: e.message === 'GRANDE' ? 'Arquivo grande demais (máximo ' + Math.round(UPLOAD_MAX / 1048576) + ' MB).' : 'Envio interrompido.' }); }
+      const tmp = path.join(UPLOADS, '.tmp-' + crypto.randomBytes(6).toString('hex'));
+      try {
+        fs.mkdirSync(UPLOADS, { recursive: true });
+        const r = zip.extrair(Buffer.concat(partes), tmp);
+        const final = path.join(UPLOADS, nome);
+        if (existe) fs.rmSync(final, { recursive: true, force: true });
+        fs.renameSync(tmp, final);
+        return json(res, 201, { deck: nome, arquivos: r.arquivos, bytes: r.bytes, substituido: existe });
+      } catch (e) {
+        fs.rmSync(tmp, { recursive: true, force: true });
+        if (e instanceof zip.ErroZip) return json(res, 400, { erro: e.message });
+        console.error('[mira-remoto] falha no envio do deck:', e.message); return json(res, 500, { erro: 'Não foi possível salvar o deck no servidor.' });
+      }
+    }
+    let md = /^\/api\/decks\/([a-z0-9][a-z0-9._-]*)$/i.exec(p);
+    if (md && req.method === 'DELETE') {                          // só apaga decks enviados, nunca os do projeto
+      const a = ip(req);
+      if (bloqueado(a)) return json(res, 429, { erro: 'Muitas tentativas. Aguarde alguns minutos.' });
+      if (!igualSeg(req.headers['x-chave'] || '', KEY)) { falhou(a); return json(res, 403, { erro: 'Chave incorreta.' }); }
+      if (!listarEnviados().includes(md[1])) return json(res, 404, { erro: 'Deck enviado não encontrado.' });
+      for (const s of sessoes.values()) if (s.deck === md[1]) return json(res, 409, { erro: 'Esse deck está em transmissão agora. Encerre antes de excluir.' });
+      fs.rmSync(path.join(UPLOADS, md[1]), { recursive: true, force: true });
+      return json(res, 200, { ok: true });
     }
     if (p === '/api/sessoes' && req.method === 'POST') {
       const a = ip(req);
@@ -261,7 +316,8 @@ const servidor = http.createServer(async (req, res) => {
     if (mm) return estatico(req, res, mm[1] === 'sync.js' ? path.join(PUB, 'sync.js') : path.join(PUB, 'mira', 'mira-draw.js'), false);
     mm = /^\/_d\/([a-z0-9][a-z0-9._-]*)\/(.+)$/i.exec(rel);            // arquivos do deck da PRÓPRIA sessão
     if (mm && sessoes.get(slug).deck === mm[1] && !BLOQUEADO.test(mm[2])) {
-      const raiz = path.join(DECKS, mm[1]), arq = path.normalize(path.join(raiz, mm[2]));
+      const raiz = pastaDoDeck(mm[1]); if (!raiz) { res.writeHead(404); return res.end(); }
+      const arq = path.normalize(path.join(raiz, mm[2]));
       if (!arq.startsWith(raiz + path.sep)) { res.writeHead(403); return res.end(); }
       return estatico(req, res, arq, !/\.html$/.test(arq));
     }

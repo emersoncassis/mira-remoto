@@ -10,8 +10,14 @@ services:
       PROTEGER: ${PROTEGER:-1}
       MARCA: ${MARCA:-CONFIDENCIAL}
       BASE_PATH: ${BASE_PATH:-}
+      UPLOADS_DIR: /data/uploads
     expose:
       - "3000"
+    volumes:
+      - decks-enviados:/data/uploads
     # Para adicionar decks sem rebuildar, descomente (a pasta decks/ do servidor vira a fonte):
     # volumes:
     #   - ./decks:/app/decks:ro
+
+volumes:
+  decks-enviados:
