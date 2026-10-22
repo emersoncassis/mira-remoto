@@ -14,7 +14,7 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
 .op{margin:1.1rem 0 0;padding:.6rem .9rem .8rem;border:1px solid rgba(255,255,255,.12);border-radius:12px}.op legend{padding:0 .4rem;font-size:.8rem;color:#9db3a8}
 .ck{display:flex;gap:.55rem;align-items:flex-start;margin:.5rem 0;font-size:.88rem;color:#dfeae4;cursor:pointer}.ck input{width:auto;margin-top:.25rem;accent-color:#34E89E}
 #linhaMarca{margin:.1rem 0 .3rem 1.6rem}#linhaMarca input{padding:.5rem .7rem;font-size:.85rem}
-.up{margin:1.1rem 0 0;padding:.6rem .9rem .9rem;border:1px dashed rgba(52,232,158,.35);border-radius:12px}.up legend{padding:0 .4rem;font-size:.8rem;color:#9db3a8}
+.up{margin:1.1rem 0 0;padding:.5rem .9rem;border:1px dashed rgba(52,232,158,.35);border-radius:12px}.up summary{cursor:pointer;font-size:.88rem;color:#34E89E;padding:.25rem .1rem;list-style:none;display:flex;align-items:center;gap:.5rem}.up summary::-webkit-details-marker{display:none}.up summary::before{content:'+';display:inline-grid;place-items:center;width:1.2rem;height:1.2rem;border:1px solid #34E89E;border-radius:50%;font-size:.9rem;line-height:1}.up[open] summary::before{content:'\2212'}.up[open] summary{margin-bottom:.4rem}
 .up input[type=file]{padding:.55rem;font-size:.85rem}.up button{margin-top:.8rem;background:transparent;color:#34E89E;border:1px solid #34E89E;padding:.65rem}
 .bar{height:6px;border-radius:99px;background:rgba(255,255,255,.1);margin-top:.7rem;overflow:hidden;display:none}.bar i{display:block;height:100%;width:0;background:#34E89E;transition:width .2s}
 .ok{color:#7ff0bf;font-size:.88rem;margin-top:.6rem;min-height:1.2em}.ex{margin-top:.5rem;background:none!important;border:0!important;color:#ffb4a4!important;font-size:.8rem;width:auto!important;padding:0!important;text-decoration:underline;cursor:pointer}
@@ -30,7 +30,7 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
   <p class="dica" id="dica"></p>
   <label for="nome">Nome do link (opcional)</label>
   <div class="pre"><span id="host"></span><span>/s/</span><input id="nome" maxlength="40" placeholder="ex.: loja-do-joao"></div>
-  <fieldset class="up" id="up"><legend>Ou envie um deck pronto (.zip)</legend>
+  <details class="up" id="up"><summary>Ou envie um deck pronto (.zip)</summary>
     <input id="arq" type="file" accept=".zip,application/zip,application/x-zip-compressed">
     <label for="nomeDeck">Nome do deck</label>
     <input id="nomeDeck" maxlength="60" placeholder="ex.: proposta-loja-joao">
@@ -41,7 +41,7 @@ button:disabled{opacity:.6}.e{margin-top:.9rem;color:#ffb4a4;font-size:.9rem;min
     <p class="dica" id="cota" hidden></p>
     <p class="dica">Compacte a pasta do deck do Mira (a que tem o <code>index.html</code>). Digite a chave acima antes de enviar.</p>
     <button type="button" class="ex" id="excluir" hidden>Excluir o deck enviado selecionado</button>
-  </fieldset>
+  </details>
   <fieldset class="op"><legend>Para quem assiste</legend>
     <label class="ck"><input type="checkbox" id="wm" checked> Marca d'água (nome do link, código do visitante e data)</label>
     <div class="pre" id="linhaMarca"><span>Texto:</span><input id="marca" maxlength="40" placeholder="CONFIDENCIAL"></div>
