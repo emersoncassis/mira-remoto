@@ -11,18 +11,27 @@ A sugestão é uma segunda camada, irmã da primeira: o mesmo deck, sem edição
 
 ## O que já existe e funciona
 
-O mira-remoto é um servidor Node sem dependências (`server.js`, cerca de 270 linhas) mais um cliente (`sync.js`). Ele foi usado em uma apresentação comercial real e agora foi generalizado para servir qualquer deck do Mira:
+**Como funciona, em 3 passos**
+1. O deck do Mira é colocado num servidor, **sem editar nada**.
+2. O servidor cria um link para a apresentação.
+3. O cliente abre o link e vê o deck com a animação normal do Mira, no próprio navegador. Quando o apresentador troca de slide ou desenha com a caneta, a tela do cliente muda junto.
 
-- o deck é copiado para `decks/<nome>/`, sem alteração;
-- o servidor injeta `<base>`, o `mira-draw.js` com a API de sincronia e o `sync.js` na hora de entregar a página;
-- slide e desenho viajam por SSE, com *long polling* como via de reserva (o Quick Tunnel da Cloudflare não suporta SSE); a animação de cada slide roda local (Regra Zero preservada);
-- pré-carregamento de tudo antes de o espectador ver o primeiro slide;
-- link por apresentação, criado com uma chave, que deixa de valer ao encerrar;
-- `references/` e arquivos de apoio nunca são entregues;
-- `npm run tunel`: apresenta do próprio notebook por um túnel gratuito da Cloudflare, sem conta e sem domínio;
-- deck de demonstração no próprio padrão do Mira e teste automatizado (33 verificações).
+**O que cada recurso resolve**
 
-A API do `mira-draw.js` (`onchange`, `getShapes`, `setShapes`) que você já criou para o `/mira-remote` foi exatamente o que tornou isso possível sem tocar no módulo. O mira-remoto reaproveita o que o Mira já tem.
+| Recurso | O que resolve |
+|---|---|
+| Link por apresentação, que deixa de valer ao encerrar | O cliente entra sem instalar nada, e o acesso acaba quando a apresentação termina |
+| A animação roda no navegador do cliente | Mantém a fluidez do Mira, ao contrário da videochamada, em que vira vídeo comprimido (Regra Zero preservada) |
+| Sincroniza slide e desenho da caneta (SSE, com *long polling* de reserva) | O cliente vê exatamente o que o apresentador mostra, em tempo real |
+| Carrega o deck inteiro antes de mostrar | Não trava nem atrasa no meio; o apresentador vê "cliente pronto" antes de começar |
+| Marca d'água e bloqueio de cópia/impressão (opcionais) | Desencorajam vazamento e permitem identificar quem vazou |
+| Chave de acesso para apresentar | Só quem tem a chave cria e conduz transmissões |
+| Pasta `references/` nunca é enviada | Material de apoio não chega ao cliente |
+| Envio do deck em .zip pela própria tela | Sobe um deck novo sem mexer no servidor |
+| `npm run tunel` | Apresenta do próprio notebook, sem servidor e sem domínio |
+| Docker/Dokploy com HTTPS | Uso profissional, com endereço fixo |
+
+Reaproveita a API do `mira-draw.js` (`onchange`, `getShapes`, `setShapes`) sem alterar o módulo. Servidor Node sem dependências, 33+ testes automatizados e um deck de demonstração no padrão do Mira.
 
 ## Proposta de skill: `/mira-remoto`
 
