@@ -104,7 +104,7 @@ function avisarContagem(s) { const r = resumo(s); s.q = (s.q || 0) + 1; s.client
 const POLL_MS = +process.env.POLL_MS || 20e3, POLL_VIVO_MS = 45e3;   // 20 s fica abaixo do limite de 100 s do Cloudflare
 function cargaPoll(s, c, primeiro) {
   const o = Object.assign({ v: s.v, q: s.q }, resumo(s));
-  if (!c.apresentador) { o.i = s.i; o.shapes = s.shapes; }
+  if (!c.apresentador) { o.i = s.i; o.shapes = s.shapes; } else o.t = s.toque || null;
   if (primeiro) o.papel = c.apresentador ? 'apresentador' : 'cliente';
   return o;
 }
@@ -275,7 +275,21 @@ const servidor = http.createServer(async (req, res) => {
       sessoes.set(slug, { deck, token, marcaDagua, protecao, marca, i: 0, v: 1, q: 1, espera: new Set(), shapes: [], clientes: new Set(), ultimo: Date.now() });
       return json(res, 201, { slug, token, deck, marcaDagua, protecao, marca });
     }
-    let m = /^\/api\/s\/([a-z0-9-]+)\/pronto$/.exec(p);
+    let m = /^\/api\/s\/([a-z0-9-]+)\/toque$/.exec(p);                 // o cliente tocou na tela: avisa quem apresenta
+    if (m && req.method === 'POST') {
+      const s = sessoes.get(m[1]); if (!s) return json(res, 404, { erro: 'Sessão não encontrada.' });
+      const b = await corpo(req, 2e3), id = String(b.c || '').replace(/[^a-z0-9]/gi, '').slice(0, 32);
+      let ok = false; s.clientes.forEach(c => { if (!c.apresentador && id && c.id === id) ok = true; });
+      const agora = Date.now();
+      if (ok && agora - (s.tToque || 0) >= 700) {
+        s.tToque = agora; const f = v => Math.max(0, Math.min(1, +v || 0));
+        s.toque = { n: (s.nt = (s.nt || 0) + 1), x: f(b.x), y: f(b.y), i: Math.max(0, Math.min(999, b.i | 0)) };
+        s.clientes.forEach(c => { if (c.apresentador && c.res) enviar(c.res, 'toque', s.toque); });
+        s.q = (s.q || 0) + 1; acordar(s, true);
+      }
+      res.writeHead(204); return res.end();
+    }
+    m = /^\/api\/s\/([a-z0-9-]+)\/pronto$/.exec(p);
     if (m && req.method === 'POST') {
       const s = sessoes.get(m[1]); if (!s) return json(res, 404, { erro: 'Sessão não encontrada.' });
       const b = await corpo(req, 2e3), id = String(b.c || '').replace(/[^a-z0-9]/gi, '').slice(0, 32);

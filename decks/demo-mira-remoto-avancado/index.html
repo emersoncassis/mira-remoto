@@ -357,7 +357,9 @@ img, svg, video, canvas, iframe, table, pre { max-width: 100%; }
 /* ===== mira-remoto · deck de demonstração ===== */
 :root{--c-sai:#e0662f;--c-medio:#e0a526}
 body > section{container-type:size}
-.slide-main h2{font-size:clamp(14px,2.8cqw,46px)}
+.slide-main{padding:2.8cqw}
+.slide-main h2{font-size:clamp(10px,2.8cqw,46px);margin-bottom:.8cqw}
+.slide-centro{padding:2.8cqw;gap:1cqw}
 
 .slide-centro{position:relative;z-index:1}
 .slide-centro h1{font-size:clamp(34px,7.4cqw,104px);max-width:84cqw}
@@ -836,14 +838,14 @@ section.hfv .slide-main h2{text-shadow:0 2px 24px rgba(11,15,13,.9)}
     var base=cv.getAttribute('data-frames'),N=+cv.getAttribute('data-n'),ctx=cv.getContext('2d'),img=[],ok=0,sec=cv.parentNode,t0=0,raf=0,i0=0;
     function nome(i){return base+'f'+('00'+(i+1)).slice(-3)+'.webp';}
     function ajusta(){var r=cv.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,1.5);cv.width=Math.max(2,r.width*d);cv.height=Math.max(2,r.height*d);desenha(i0);}
-    function desenha(i){var m=img[i];if(!m||!m.complete||!m.naturalWidth)return;i0=i;var cw=cv.width,ch=cv.height,k=Math.max(cw/m.naturalWidth,ch/m.naturalHeight),w=m.naturalWidth*k,h=m.naturalHeight*k;ctx.drawImage(m,(cw-w)/2,(ch-h)/2,w,h);}
+    function desenha(i){var m=img[i];if(!m||!m.complete||!m.naturalWidth){for(var j=i-1;j>=0&&!(img[j]&&img[j].complete&&img[j].naturalWidth);j--);if(j<0)return;i=j;m=img[j];}i0=i;var cw=cv.width,ch=cv.height,k=Math.max(cw/m.naturalWidth,ch/m.naturalHeight),w=m.naturalWidth*k,h=m.naturalHeight*k;ctx.drawImage(m,(cw-w)/2,(ch-h)/2,w,h);}
     function carrega(){for(var i=0;i<N;i++){(function(i){var m=new Image();m.onload=function(){ok++;if(i===0)ajusta();};m.src=nome(i);img[i]=m;})(i);}}
-    function passo(ts){if(!t0)t0=ts;var f=Math.floor((ts-t0)/1000*FPS),c=2*(N-1),p=f%c,i=p<N?p:c-p;if(ok>=N)desenha(i);raf=requestAnimationFrame(passo);}
+    function passo(ts){if(!t0)t0=ts;var f=Math.floor((ts-t0)/1000*FPS),c=2*(N-1),p=f%c,i=p<N?p:c-p;desenha(i);raf=requestAnimationFrame(passo);}
     function liga(){if(reduz||raf)return;t0=0;raf=requestAnimationFrame(passo);}
     function desliga(){cancelAnimationFrame(raf);raf=0;}
     if('IntersectionObserver' in window){new IntersectionObserver(function(es){es.forEach(function(e){(e.isIntersecting&&e.intersectionRatio>=.3)?liga():desliga();});},{threshold:[0,.3,1]}).observe(sec);}else liga();
     window.addEventListener('resize',ajusta);
-    if(window.__MIRA_REMOTE__&&!window.__miraCarregado)addEventListener('mira-carregado',carrega,{once:true});else carrega();
+    carrega();
   });
 })();
 </script>

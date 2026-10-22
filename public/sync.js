@@ -14,6 +14,9 @@
   var st = d.createElement('style');
   st.textContent = '#fs-btn{position:fixed;top:14px;right:14px;z-index:2147483000;width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(11,15,13,.6);color:#fff;cursor:pointer;display:grid;place-items:center;opacity:.35;transition:opacity .25s;padding:0}#fs-btn:hover,#fs-btn:focus-visible{opacity:1}'
     + '.cursor-off,.cursor-off *{cursor:none!important}'
+    + '#toque{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);opacity:0;z-index:2147483300;display:flex;align-items:center;gap:10px;background:rgba(11,15,13,.94);color:#F2FFF8;border:1px solid #e0a526;border-radius:14px;padding:11px 16px;font:700 14px/1.3 system-ui,sans-serif;box-shadow:0 8px 30px rgba(224,165,38,.28);transition:opacity .25s,transform .25s;pointer-events:none}'
+    + '#toque.v{opacity:1;transform:translateX(-50%)}#toque small{display:block;font-weight:500;opacity:.75;font-size:12px}'
+    + '.ping{position:fixed;z-index:2147483250;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;border:3px solid #e0a526;pointer-events:none;animation:ping 1.4s ease-out forwards}@keyframes ping{to{transform:scale(5);opacity:0}}'
     + '#tx{position:fixed;z-index:2147483000;left:14px;font:600 12px/1 system-ui,sans-serif;color:#fff;background:rgba(11,15,13,.72);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:8px 12px;display:flex;align-items:center;gap:10px;backdrop-filter:blur(8px)}'
     + '#tx.v{top:14px}#tx.a{bottom:14px}#tx.wait i{background:#e0a526;box-shadow:0 0 8px #e0a526}#tx.ok{border-color:#34E89E}#tx.ok span{color:#34E89E}#tx i{width:8px;height:8px;border-radius:50%;background:#34E89E;box-shadow:0 0 8px #34E89E}#tx.off i{background:#e0a526;box-shadow:none}'
     + '#tx button{all:unset;cursor:pointer;color:#34E89E;font-weight:700}#tx button:hover{text-decoration:underline}'
@@ -77,6 +80,7 @@
   function aoEstado(s) {
     if (s.papel) { papel = s.papel; if (!pronto) montar(); }
     tx.classList.remove('off'); atualizaTxt(s);
+    if (papel === 'apresentador') { if (ultN === null) ultN = s.t ? s.t.n : 0; else if (s.t) avisoToque(s.t); }
     if (papel === 'cliente') {
       var mudou = alvo !== s.i; alvo = s.i; ultShapes = s.shapes || [];
       if (carregado) ir(alvo);
@@ -105,6 +109,7 @@
     var espera = setTimeout(function () { if (!chegou) { trocou = true; es.close(); poll(); } }, 4000);
     es.addEventListener('estado', function (ev) { chegou = true; clearTimeout(espera); aoEstado(JSON.parse(ev.data)); });
     es.addEventListener('quem', function (ev) { atualizaTxt(JSON.parse(ev.data)); });
+    es.addEventListener('toque', function (ev) { avisoToque(JSON.parse(ev.data)); });
     es.addEventListener('fim', function () { fim(); });
     es.onerror = function () {
       if (trocou) return;
@@ -124,6 +129,22 @@
         })
         .catch(function (e) { if (e === 0) return; tx.classList.add('off'); txt.textContent = 'Reconectando…'; setTimeout(volta, 1500); });
     })();
+  }
+  /* o cliente tocou na tela: aviso discreto para quem apresenta (cartão no topo + círculo no ponto tocado) */
+  var ultN = null, tToque = 0;
+  function avisoToque(t) {
+    if (papel !== 'apresentador' || !t || ultN === null || t.n <= ultN) return;
+    ultN = t.n;
+    var el = d.getElementById('toque');
+    if (!el) { el = d.createElement('div'); el.id = 'toque'; d.body.appendChild(el); }
+    el.innerHTML = '<span style="font-size:22px">👆</span><div>O cliente tocou na tela<small>pode estar pedindo atenção</small></div>';
+    el.classList.add('v'); clearTimeout(tToque); tToque = setTimeout(function () { el.classList.remove('v'); }, 5000);
+    if (t.i === atual()) {
+      var q = quadro(t.i), pg = d.createElement('div'); pg.className = 'ping';
+      pg.style.left = (q.l + t.x * q.w) + 'px'; pg.style.top = (q.t + t.y * q.w * 9 / 16) + 'px';
+      d.body.appendChild(pg); setTimeout(function () { pg.remove(); }, 1500);
+    }
+    try { if (navigator.vibrate) navigator.vibrate(60); } catch (_) { }
   }
   function atualizaTxt(r) {
     if (papel !== 'apresentador') { txt.textContent = 'AO VIVO'; return; }
@@ -323,6 +344,14 @@
       addEventListener('keydown', function (e) { if (e.key === 'f' || e.key === 'F') { tecla(e); return; } e.preventDefault(); e.stopImmediatePropagation(); }, true);
       ['wheel', 'touchmove'].forEach(function (n) { addEventListener(n, function (e) { e.preventDefault(); }, { passive: false }); });
       addEventListener('resize', function () { ir(alvo); aplicaDesenho(); });
+      var ultT = 0;
+      addEventListener('pointerdown', function (e) {                  // toque do cliente avisa o apresentador
+        if (!carregado || (e.target && e.target.closest && e.target.closest('#fs-btn,#gira,#dica'))) return;
+        var a = Date.now(); if (a - ultT < 1200) return; ultT = a;
+        var q = quadro(alvo);
+        fetch(BASE + '/api/s/' + slug + '/toque', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+          body: JSON.stringify({ c: idc, i: alvo, x: (e.clientX - q.l) / q.w, y: (e.clientY - q.t) / (q.w * 9 / 16) }) }).catch(function () { });
+      }, true);
     }
   }
   avisoGirar();
